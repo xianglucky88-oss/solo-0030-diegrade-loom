@@ -1,0 +1,47 @@
+:root {
+  color-scheme: light;
+  font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  color: #182924;
+  background: #f5f7f4;
+  --text: #182924;
+  --muted: #4f635a;
+  --line: #d4dfd8;
+  --paper: #fff;
+  --accent: #105945;
+  --a: #219477;
+  --b: #79a9c9;
+  --reject: #cc6268;
+  --review: #efb64d;
+  --missing: #cad4d0;
+  --reserved: #a3a59c;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; line-height: 1.55; }
+h1, h2, p { margin: 0; }
+h2 { font-size: 1rem; }
+a { color: var(--accent); }
+button, input, select, textarea { font: inherit; color: inherit; }
+button, .action {
+  min-height: 36px; padding: 5px 12px; border: 1px solid var(--line);
+  border-radius: 5px; background: var(--paper); color: var(--text); cursor: pointer;
+}
+button:hover:not(:disabled), .action:hover { border-color: var(--accent); }
+button:disabled { cursor: not-allowed; opacity: .55; }
+button.primary { background: var(--accent); border-color: var(--accent); color: white; }
+:focus-visible { outline: 2px solid #176e9a; outline-offset: 3px; }
+.shell { max-width: 1360px; margin-inline: auto; padding-inline: 28px; }
+.mast { background: #182e27; color: #f0f7f3; }
+.mast-inner { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 62px; flex-wrap: wrap; }
+.brand, .selector { display: flex; align-items: center; gap: 10px; }
+.brand { font-weight: 700; }
+.mark { background: #bce7cd; color: #123328; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 5px; }
+.selector label { color: #d0e2d8; font-size: .85rem; }
+.selector select, .selector button { color: var(--text); }
+main { padding-bottom: 44px; }
+.status { margin-bottom: 12px; padding: 8px 12px; background: #e5f1e9; border-left: 3px solid #257e56; overflow-wrap: anywhere; }
+.status.error { color: #78222d; background: #fae8e7; border-color: #ae4654; }
+@media (max-width: 620px) {
+  .shell { padding-inline: 14px; }
+  .mast-inner { padding-block: 10px; }
+}

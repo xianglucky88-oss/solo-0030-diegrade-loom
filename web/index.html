@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>晶格分档台</title>
+  <link rel="stylesheet" href="/css/base.css">
+  <link rel="stylesheet" href="/css/station.css">
+  <link rel="stylesheet" href="/css/forms.css">
+  <script type="module" src="/js/app.js"></script>
+</head>
+<body>
+  <header class="mast"><div class="shell mast-inner">
+    <div class="brand"><span class="mark" aria-hidden="true">▦</span><span>晶格分档台</span></div>
+    <div class="selector"><label for="wafer">工作晶圆</label><select id="wafer"></select><button id="reload" type="button" title="刷新现场" aria-label="刷新现场">↻</button></div>
+  </div></header>
+  <main class="shell">
+    <header class="station-head">
+      <div><div class="eyebrow">探针归档 · 分选交付</div><h1 id="wafer-title">晶圆工作区</h1><p id="wafer-meta"></p></div>
+      <a href="#operations" class="action">现场操作 ↓</a>
+    </header>
+    <div id="status" role="status" aria-live="polite" class="status" hidden></div>
+    <div class="brief" id="counts" aria-label="分档计数"></div>
+    <div class="bench">
+      <section class="map" aria-labelledby="map-title">
+        <header class="section-head"><h2 id="map-title">物理格点图</h2><button id="flag-focus" type="button" title="定位到首个未测或待复测点">定位待办 ⊙</button></header>
+        <div class="map-stage" id="map"></div>
+        <div class="map-caption"><span>物理坐标 · 上方为 +Y</span><span id="map-caption"></span></div>
+      </section>
+      <aside class="trace" aria-labelledby="trace-title">
+        <header class="section-head"><h2 id="trace-title">单颗证据</h2></header>
+        <div id="trace"></div>
+        <form id="inspect" class="row compact" aria-label="按坐标定位">
+          <label>横坐标 <input name="x" type="number" required min="-48" max="48"></label>
+          <label>纵坐标 <input name="y" type="number" required min="-48" max="48"></label>
+          <button>定位</button>
+        </form>
+      </aside>
+    </div>
+    <section class="operations" id="operations" aria-label="现场操作">
+      <div role="tablist" class="tabs" aria-label="操作类型" id="tabs">
+        <button type="button" id="tab-batch" data-panel="batch" role="tab" aria-selected="true" aria-controls="batch">批次预检与导入</button>
+        <button type="button" id="tab-hold" data-panel="hold" role="tab" aria-selected="false" aria-controls="hold" tabindex="-1">复核登记</button>
+        <button type="button" id="tab-release" data-panel="release" role="tab" aria-selected="false" aria-controls="release" tabindex="-1">分选交付</button>
+        <button type="button" id="tab-catalog" data-panel="catalog" role="tab" aria-selected="false" aria-controls="catalog" tabindex="-1">规则与晶圆</button>
+      </div>
+      <section id="batch" role="tabpanel" aria-labelledby="tab-batch">
+        <form id="batch-form">
+          <div class="row">
+            <label>批次编号 <input name="id" required maxlength="40" autocomplete="off"></label>
+            <label>测量类型 <select name="kind"><option value="screen">首测</option><option value="repeat">复测</option></select></label>
+            <label>逆时针旋转 <select name="turn"><option value="0">0°</option><option value="1">90°</option><option value="2">180°</option><option value="3">270°</option></select></label>
+            <label>横向平移 <input type="number" name="dx" value="0" min="-2048" max="2048" required></label>
+            <label>纵向平移 <input type="number" name="dy" value="0" min="-2048" max="2048" required></label>
+            <label class="check"><input type="checkbox" name="mirror"> 横轴镜像</label>
+          </div>
+          <label>探针表文件 <input type="file" id="file" accept=".csv,text/csv"></label>
+          <label>探针表内容 <textarea name="csv" rows="5" required spellcheck="false" placeholder="x,y,contact,leak_na,margin_mv,parent"></textarea></label>
+          <div class="row"><button name="mode" value="preview">预检批次</button><button class="primary" name="mode" value="batches">导入批次</button></div>
+          <div id="preview" class="output"></div>
+        </form>
+      </section>
+      <section id="hold" role="tabpanel" aria-labelledby="tab-hold" hidden>
+        <form id="hold-form">
+          <h2>重新开启复测</h2>
+          <p id="hold-site">尚未选中格点</p>
+          <div class="row"><label>复核编号 <input name="id" required maxlength="40"></label><label class="wide">复核事由 <input name="reason" required maxlength="240"></label></div>
+          <button class="primary">登记复核</button>
+        </form>
+      </section>
+      <section id="release" role="tabpanel" aria-labelledby="tab-release" hidden>
+        <div class="row"><button id="seal" class="primary" type="button">签出当前版</button><span id="release-status"></span></div>
+        <div id="archives"></div>
+        <form id="compare" class="row compact">
+          <label>旧版 <select name="older" required></select></label><label>新版 <select name="newer" required></select></label><button>比较两版</button>
+        </form>
+        <div id="comparison" class="output"></div>
+      </section>
+      <section id="catalog" role="tabpanel" aria-labelledby="tab-catalog" hidden>
+        <div class="catalog">
+          <form id="rule-form"><h2>登记规则版本</h2><div class="row">
+            <label>规则名称 <input name="name" required maxlength="40"></label><label>版本 <input name="version" type="number" min="1" max="9999" value="1" required></label>
+            <label>漏电上限（nA） <input name="leak_limit" type="number" min="0" max="1000000" value="100" required></label>
+            <label>裕量下限（mV） <input name="margin_min" type="number" min="0" max="10000" value="40" required></label>
+            <label>甲档下限（mV） <input name="grade_a" type="number" min="1" max="10000" value="80" required></label>
+            <label>边缘增量（mV） <input name="edge_add" type="number" min="0" max="10000" value="10" required></label>
+            <label>复测带宽（mV） <input name="guard" type="number" min="0" max="10000" value="3" required></label>
+          </div><button>登记规则</button></form>
+          <form id="wafer-form"><h2>登记晶圆</h2><div class="row">
+            <label>晶圆编号 <input name="id" required maxlength="40"></label><label>规则版本 <select name="rule" required></select></label>
+          </div><label>物理行段 <textarea name="spans" required rows="2" placeholder="[[0,-1,1],[1,-1,1]]"></textarea></label>
+          <label>保留格点 <input name="reserved" value="[]" required></label><button>登记晶圆</button></form>
+        </div>
+      </section>
+    </section>
+  </main>
+</body>
+</html>

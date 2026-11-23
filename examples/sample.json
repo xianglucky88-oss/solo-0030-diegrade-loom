@@ -1,0 +1,5 @@
+{
+  "rule": {"name":"sable","version":1,"leak_limit":100,"margin_min":40,"grade_a":80,"edge_add":10,"guard":3},
+  "wafer": {"id":"NX-07","spans":[[-5,-2,2],[-4,-3,3],[-3,-4,4],[-2,-5,5],[-1,-5,5],[0,-5,5],[1,-5,5],[2,-5,5],[3,-4,4],[4,-3,3],[5,-2,2]],"reserved":[[0,0]],"rule":"sable","rule_version":1},
+  "batches": [{"id":"P01","kind":"screen","frame":{"offset":[0,0],"turn":0,"mirror":false},"csv":"nx07-screen.csv"}]
+}
