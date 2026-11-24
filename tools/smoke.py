@@ -14,8 +14,11 @@ from diegrade.database import Database
 from diegrade.httpd import make_server
 
 HEADER = 'x,y,contact,leak_na,margin_mv,parent\n'
+TRACE_HEADER = 'x,y,contact,leak_na,margin_mv,parent,card,tip,segment\n'
 DEMO = Path(__file__).resolve().parent.parent / 'examples'
 SHAPE = '/api/diegrade/wafers/LX-19'
+MASK = [[-1, -2, 2], [0, -2, 2], [1, -2, 2]]
+SITES = [(x, y) for y in (-1, 0, 1) for x in (-2, -1, 0, 1, 2)]
 
 
 class Station:
@@ -154,12 +157,127 @@ def compare(s):
     assert s.wafer('/releases/2/sorter') == s.old_bytes
 
 
-STEPS = (rules, wafer, preview, ingest, grid, trace, seal, replay, export, hold, compare)
+def device(turn, px, py):
+    x, y = px, py
+    for _ in range((4 - turn) % 4):
+        x, y = -y, x
+    return x, y
+
+
+def screen_rows(turn, target=None, opens=()):
+    lines = []
+    for index, (px, py) in enumerate(SITES):
+        dx, dy = device(turn, px, py)
+        if (px, py) in opens:
+            lines.append(f'{dx},{dy},open,,,,PC-118,12,S03')
+        elif (px, py) == target:
+            lines.append(f'{dx},{dy},ok,50,95,,PC-118,12,S03')
+        else:
+            lines.append(f'{dx},{dy},ok,50,95,,PC-118,{101 + index},S03')
+    return '\n'.join(lines) + '\n'
+
+
+def post_wafer(s, wid, suffix, body=None, error=None):
+    return s.request(f'/api/diegrade/wafers/{wid}{suffix}', body, error)
+
+
+def batch9(s, wid, rev, bid, rows, kind='screen', turn=0, dry=False, error=None):
+    body = {'expected': rev, 'batch': {'id': bid, 'kind': kind,
+                                       'frame': {'offset': [0, 0], 'turn': turn, 'mirror': False},
+                                       'csv': TRACE_HEADER + rows}}
+    return post_wafer(s, wid, '/preview' if dry else '/batches', body, error)
+
+
+def suspend_setup(s):
+    for wid in ('SQ-01', 'SQ-02', 'SQ-03'):
+        s.request('/api/diegrade/wafers', {'id': wid, 'spans': MASK, 'reserved': [],
+                                           'rule': 'sable', 'rule_version': 1})
+    # 同一设备坐标 (0,2)：SQ-01 转 90° 映到西侧 (-2,0)，SQ-02 转 270° 映到东侧 (2,0)，均用同一段触点终档。
+    batch9(s, 'SQ-01', 0, 'Q01', screen_rows(1, target=(-2, 0)), turn=1)
+    batch9(s, 'SQ-02', 0, 'Q11', screen_rows(3, target=(2, 0)), turn=3)
+    # SQ-03 曾用该段触点开路，随后以换针后的同号触点（新工作段 S04）复测终档。
+    batch9(s, 'SQ-03', 0, 'Q21', screen_rows(0, opens={(0, 0)}))
+    batch9(s, 'SQ-03', 1, 'Q22', '0,0,ok,50,95,Q21,PC-118,12,S04\n', kind='repeat')
+    assert post_wafer(s, 'SQ-01', '/cells/-2/0')['state'] == 'a'
+    assert post_wafer(s, 'SQ-02', '/cells/2/0')['state'] == 'a'
+    assert post_wafer(s, 'SQ-03', '/cells/0/0')['state'] == 'a'
+    s.sealed, s.sorters = {}, {}
+    for wid, rev in (('SQ-01', 1), ('SQ-02', 1), ('SQ-03', 2)):
+        s.sealed[wid] = post_wafer(s, wid, '/releases', {'expected': rev})
+        s.sorters[wid] = post_wafer(s, wid, f'/releases/{rev}/sorter')
+
+
+def suspend_confirm(s):
+    payload = {'id': 'SUS-01', 'card': 'PC-118', 'tip': 12, 'segment': 'S03', 'reason': '触点氧化，读数漂移'}
+    outcome = s.request('/api/diegrade/suspensions', payload)
+    assert not outcome['duplicate']
+    assert outcome['affected'] == [{'wafer': 'SQ-01', 'revision': 2, 'sites': [[-2, 0]]},
+                                   {'wafer': 'SQ-02', 'revision': 2, 'sites': [[2, 0]]}]
+    # 第三片保持当前终档及代次。
+    view = post_wafer(s, 'SQ-03', '')
+    assert view['revision'] == 2 and view['counts'] == {'a': 15}
+    # 重送同一停用确认只生效一次。
+    again = s.request('/api/diegrade/suspensions', payload)
+    assert again['duplicate'] and again['affected'] == outcome['affected']
+    assert post_wafer(s, 'SQ-01', '')['revision'] == 2
+    s.request('/api/diegrade/suspensions', {**payload, 'reason': '另一份依据'}, (409, 'suspend_conflict'))
+    # 格点追溯显示卡号、触点号、工作段与原始行。
+    cell = post_wafer(s, 'SQ-01', '/cells/-2/0')
+    assert cell['state'] == 'review' and len(cell['chain']) == 2
+    measure, entry = cell['chain']
+    assert (measure['record']['card'], measure['record']['tip'], measure['record']['segment']) == ('PC-118', 12, 'S03')
+    assert measure['record']['raw'] == '0,2,ok,50,95,,PC-118,12,S03'
+    assert entry['event'] == 'suspend' and entry['id'] == 'SUS-01' and entry['batch'] == 'Q01'
+    assert (entry['card'], entry['tip'], entry['segment']) == ('PC-118', 12, 'S03') and entry['why'] == payload['reason']
+    assert [item['id'] for item in s.request('/api/diegrade/suspensions')] == ['SUS-01']
+
+
+def suspend_blocks(s):
+    # 停用前封存的分选件按原摘要独立复算。
+    for wid, rev in (('SQ-01', 1), ('SQ-02', 1), ('SQ-03', 2)):
+        result = post_wafer(s, wid, f'/releases/{rev}/replay')
+        assert result['verified'] and result['sha256'] == s.sealed[wid]['sha256']
+        assert post_wafer(s, wid, f'/releases/{rev}/sorter') == s.sorters[wid]
+    # 停用后的正式签出随新现场状态阻签；未受影响晶圆维持原代次。
+    post_wafer(s, 'SQ-01', '/releases', {'expected': 2}, (409, 'not_ready'))
+    post_wafer(s, 'SQ-02', '/releases', {'expected': 2}, (409, 'not_ready'))
+    assert post_wafer(s, 'SQ-03', '/releases', {'expected': 2}) == s.sealed['SQ-03']
+    # 预检与正式导入拒收带该组合的新量测，即使复测父批次有效。
+    retired = '0,2,ok,50,90,Q01,PC-118,12,S03\n'
+    batch9(s, 'SQ-01', 2, 'Q02', retired, kind='repeat', turn=1, dry=True, error=(422, 'suspended'))
+    batch9(s, 'SQ-01', 2, 'Q02', retired, kind='repeat', turn=1, error=(422, 'suspended'))
+    batch9(s, 'SQ-03', 2, 'Q23', '1,1,ok,50,90,,PC-118,12,S03\n', dry=True, error=(422, 'suspended'))
+    # 旧格式来件不携带组合，仍按既有契约工作；预检不推进代次。
+    legacy = post_wafer(s, 'SQ-01', '/preview', {'expected': 2, 'batch': {'id': 'Q0L', 'kind': 'repeat',
+                        'frame': {'offset': [0, 0], 'turn': 1, 'mirror': False}, 'csv': HEADER + '0,2,ok,50,90,Q01\n'}})
+    assert len(legacy['changes']) == 1 and post_wafer(s, 'SQ-01', '')['revision'] == 2
+
+
+def suspend_retake(s):
+    # 换针后同卡同触点在新工作段复测，终判并重新签出。
+    outcome = batch9(s, 'SQ-01', 2, 'Q02', '0,2,ok,50,90,Q01,PC-118,12,S04\n', kind='repeat', turn=1)
+    assert outcome['revision'] == 3 and outcome['changes'] == [{'site': [-2, 0], 'state': 'a'}]
+    cell = post_wafer(s, 'SQ-01', '/cells/-2/0')
+    assert cell['state'] == 'a' and cell['batch'] == 'Q02'
+    assert batch9(s, 'SQ-01', 3, 'Q02', '0,2,ok,50,90,Q01,PC-118,12,S04\n', kind='repeat', turn=1)['duplicate']
+    release = post_wafer(s, 'SQ-01', '/releases', {'expected': 3})
+    assert release['revision'] == 3
+    replay = post_wafer(s, 'SQ-01', '/releases/3/replay')
+    assert replay['verified'] and replay['rows'] == 15
+    changes = post_wafer(s, 'SQ-01', '/compare/1/3')['changes']
+    assert changes == [{'site': [-2, 0], 'before': 'a', 'after': 'a', 'kind': 'evidence',
+                        'from_batch': 'Q01', 'to_batch': 'Q02'}]
+    # 第二片仍待复测。
+    assert post_wafer(s, 'SQ-02', '/cells/2/0')['state'] == 'review'
+
+
+STEPS = (rules, wafer, preview, ingest, grid, trace, seal, replay, export, hold, compare,
+         suspend_setup, suspend_confirm, suspend_blocks, suspend_retake)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--through', choices=[flow.__name__ for flow in STEPS], default='compare')
+    parser.add_argument('--through', choices=[flow.__name__ for flow in STEPS], default=STEPS[-1].__name__)
     args = parser.parse_args()
     with TemporaryDirectory(prefix='diegrade-smoke-') as temp, make_server(Database(Path(temp) / 'db'), 0) as server:
         worker = Thread(target=server.serve_forever, daemon=True)

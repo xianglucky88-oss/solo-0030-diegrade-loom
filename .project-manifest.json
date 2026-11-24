@@ -8,6 +8,7 @@
     {"id":"probe","paths":["diegrade/probe_csv.py","diegrade/batches.py"],"responsibility":"校验并映射设备表"},
     {"id":"timeline","paths":["diegrade/grading.py","diegrade/timeline.py"],"responsibility":"决定档位和逐颗有效证据"},
     {"id":"intake","paths":["diegrade/intake.py"],"responsibility":"协调预检、提交和开启复测"},
+    {"id":"suspend","paths":["diegrade/suspensions.py"],"responsibility":"登记触点停用并批量重开复测"},
     {"id":"workbench","paths":["diegrade/workbench.py"],"responsibility":"交付现场图和逐颗追溯"},
     {"id":"archive","paths":["diegrade/archives.py","diegrade/codec.py"],"responsibility":"封存、核验内容摘要和复算"},
     {"id":"sorter","paths":["diegrade/sorter.py","diegrade/comparison.py"],"responsibility":"构造分选计划并解释版本变化"},
@@ -25,6 +26,7 @@
     {"id":"replay","name":"回放封存输入","entry":"GET .../releases/{rev}/replay","steps":["校验封存摘要","以原规则重算分选行"],"module_ids":["http","archive","timeline","sorter"],"success":"返回复算一致与行数","failure":"不存在的分选版不可回放","verification":"python3 -B -m tools.smoke --through replay"},
     {"id":"export","name":"下载分选表","entry":"GET .../releases/{rev}/sorter","steps":["验证分选版","序列化稳定 CSV"],"module_ids":["http","archive","sorter"],"success":"顺序固定且不含保留点","failure":"工作态不能直接导出","verification":"python3 -B -m tools.smoke --through export"},
     {"id":"hold","name":"重新开放逐颗复测","entry":"POST /wafers/{id}/holds","steps":["核实当前格点已有终档","追加复核并阻止新版签出"],"module_ids":["http","intake","storage","timeline"],"success":"旧版不变，现场待复测","failure":"保留点不能复核","verification":"python3 -B -m tools.smoke --through hold"},
-    {"id":"compare","name":"比较同片两版","entry":"GET .../compare/{old}/{new}","steps":["复算确认两个封存件","按物理坐标标记变档和来源变化"],"module_ids":["http","archive","sorter","timeline"],"success":"返回真正发生变化的点及来源","failure":"倒序版本拒绝","verification":"python3 -B -m tools.smoke --through compare"}
+    {"id":"compare","name":"比较同片两版","entry":"GET .../compare/{old}/{new}","steps":["复算确认两个封存件","按物理坐标标记变档和来源变化"],"module_ids":["http","archive","sorter","timeline"],"success":"返回真正发生变化的点及来源","failure":"倒序版本拒绝","verification":"python3 -B -m tools.smoke --through compare"},
+    {"id":"suspend","name":"停用触点工作段","entry":"POST /suspensions","steps":["按卡号触点工作段找出各片当前终档证据","逐片推进一代重开复测并记录停用依据","后续携带该组合的量测一律拒收"],"module_ids":["http","storage","suspend","timeline","intake"],"success":"同一确认重发幂等，每片受影响晶圆只推进一代","failure":"携带停用组合的量测预检导入均拒绝","verification":"python3 -B -m tools.smoke --through suspend_retake"}
   ]
 }

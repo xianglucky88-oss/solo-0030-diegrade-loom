@@ -15,6 +15,8 @@ class Timeline:
     def apply(self, event):
         if event['kind'] == 'batch':
             self.apply_batch(event['body'], event['revision'])
+        elif event['kind'] == 'suspend':
+            self.apply_suspend(event['body'], event['revision'])
         else:
             self.apply_hold(event['body'], event['revision'])
 
@@ -44,6 +46,19 @@ class Timeline:
         hold = {'event': 'hold', 'why': body['reason'], 'revision': revision, 'batch': self.active[site]['batch']}
         self.holds[site] = hold
         self.history[site].append(hold)
+
+    def apply_suspend(self, body, revision):
+        key = (body['card'], body['tip'], body['segment'])
+        for site in body['sites']:
+            site = tuple(site)
+            active = self.active.get(site)
+            record = active['record'] if active and self.state(site) in FINAL else None
+            if not record or (record['card'], record['tip'], record['segment']) != key:
+                raise DomainError('suspend_state', f'格点 {site} 的当前终档证据不属于该停用组合', 409)
+            entry = {'event': 'suspend', 'id': body['id'], 'why': body['reason'], 'revision': revision,
+                     'batch': active['batch'], 'card': body['card'], 'tip': body['tip'], 'segment': body['segment']}
+            self.holds[site] = entry
+            self.history[site].append(entry)
 
     def state(self, site):
         if site in self.reserved:

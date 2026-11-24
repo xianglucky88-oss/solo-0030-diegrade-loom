@@ -1,4 +1,4 @@
-from . import events
+from . import events, suspensions
 from .batches import prepare
 from .errors import DomainError
 from .geometry import point
@@ -22,6 +22,11 @@ def intake(conn, wafer_id, data, write):
         if duplicate != batch:
             raise DomainError('batch_conflict', '批次编号已用于另一份证据', 409)
         return {'revision': revision, 'duplicate': True, 'changes': []}
+    suspended = suspensions.matching(conn)
+    for row in batch['rows']:
+        if row['card'] is not None and (row['card'], row['tip'], row['segment']) in suspended:
+            raise DomainError('suspended', f"探针卡 {row['card']} 触点 {row['tip']} 工作段 {row['segment']} "
+                                           f"已停用，拒收该行：{row['raw']}")
     if revision == events.LIMIT:
         raise DomainError('limit', '本片现场记录已达上限', 409)
     timeline = replay_timeline(spec, events.read(conn, wafer_id))

@@ -5,6 +5,7 @@ import {byId, options} from './dom.js';
 import {bindTabs} from './navigation.js';
 import {bindReleases, clearComparison, renderReleases} from './releases.js';
 import {flash, renderCounters} from './status.js';
+import {bindSuspensions, loadSuspensions} from './suspensions.js';
 import {renderTrace} from './trace.js';
 import {renderMap} from './wafer-map.js';
 
@@ -70,6 +71,7 @@ function initialize() {
   bindBatch(action, current, open);
   bindCatalog(action, open);
   bindReleases(action, current, open);
+  bindSuspensions(action, open);
   byId('reload').addEventListener('click', action(() => open()));
   byId('wafer').addEventListener('change', action(event => open(event.target.value)));
   byId('flag-focus').addEventListener('click', () => {
@@ -89,7 +91,7 @@ function initialize() {
     flash('已登记复核，等待新的探针批次');
   }));
   render(null);
-  action(() => Promise.all([open(), loadRules()]))();
+  action(() => Promise.all([open(), loadRules(), loadSuspensions()]))();
 }
 
 initialize();

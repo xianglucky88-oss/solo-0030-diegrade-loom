@@ -1,6 +1,6 @@
 import re
 
-from . import archives, comparison, intake, rules, wafers, workbench
+from . import archives, comparison, intake, rules, suspensions, wafers, workbench
 from .errors import DomainError
 from .sorter import as_csv
 from .validation import integer
@@ -33,6 +33,16 @@ def wafer_list(conn, _):
 @route('POST', '/wafers', write=True)
 def wafer_register(conn, body):
     return wafers.register(conn, body)
+
+
+@route('GET', '/suspensions')
+def suspensions_list(conn, _):
+    return suspensions.catalog(conn)
+
+
+@route('POST', '/suspensions', write=True)
+def suspensions_confirm(conn, body):
+    return suspensions.confirm(conn, body)
 
 
 @route('GET', r'/wafers/([^/]+)')

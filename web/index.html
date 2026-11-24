@@ -41,6 +41,7 @@
       <div role="tablist" class="tabs" aria-label="操作类型" id="tabs">
         <button type="button" id="tab-batch" data-panel="batch" role="tab" aria-selected="true" aria-controls="batch">批次预检与导入</button>
         <button type="button" id="tab-hold" data-panel="hold" role="tab" aria-selected="false" aria-controls="hold" tabindex="-1">复核登记</button>
+        <button type="button" id="tab-suspend" data-panel="suspend" role="tab" aria-selected="false" aria-controls="suspend" tabindex="-1">触点停用</button>
         <button type="button" id="tab-release" data-panel="release" role="tab" aria-selected="false" aria-controls="release" tabindex="-1">分选交付</button>
         <button type="button" id="tab-catalog" data-panel="catalog" role="tab" aria-selected="false" aria-controls="catalog" tabindex="-1">规则与晶圆</button>
       </div>
@@ -55,7 +56,7 @@
             <label class="check"><input type="checkbox" name="mirror"> 横轴镜像</label>
           </div>
           <label>探针表文件 <input type="file" id="file" accept=".csv,text/csv"></label>
-          <label>探针表内容 <textarea name="csv" rows="5" required spellcheck="false" placeholder="x,y,contact,leak_na,margin_mv,parent"></textarea></label>
+          <label>探针表内容 <textarea name="csv" rows="5" required spellcheck="false" placeholder="x,y,contact,leak_na,margin_mv,parent[,card,tip,segment]"></textarea></label>
           <div class="row"><button name="mode" value="preview">预检批次</button><button class="primary" name="mode" value="batches">导入批次</button></div>
           <div id="preview" class="output"></div>
         </form>
@@ -67,6 +68,21 @@
           <div class="row"><label>复核编号 <input name="id" required maxlength="40"></label><label class="wide">复核事由 <input name="reason" required maxlength="240"></label></div>
           <button class="primary">登记复核</button>
         </form>
+      </section>
+      <section id="suspend" role="tabpanel" aria-labelledby="tab-suspend" hidden>
+        <form id="suspend-form">
+          <h2>停用触点工作段</h2>
+          <div class="row">
+            <label>停用编号 <input name="id" required maxlength="40" autocomplete="off"></label>
+            <label>探针卡号 <input name="card" required maxlength="40" autocomplete="off"></label>
+            <label>触点号 <input name="tip" type="number" min="1" max="99999" required></label>
+            <label>工作段标识 <input name="segment" required maxlength="40" autocomplete="off"></label>
+            <label class="wide">停用依据 <input name="reason" required maxlength="240"></label>
+          </div>
+          <button class="primary">确认停用</button>
+        </form>
+        <div id="suspend-result" class="output"></div>
+        <div id="suspensions"></div>
       </section>
       <section id="release" role="tabpanel" aria-labelledby="tab-release" hidden>
         <div class="row"><button id="seal" class="primary" type="button">签出当前版</button><span id="release-status"></span></div>
