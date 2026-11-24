@@ -6,6 +6,7 @@ import {bindTabs} from './navigation.js';
 import {bindReleases, clearComparison, renderReleases} from './releases.js';
 import {flash, renderCounters} from './status.js';
 import {renderTrace} from './trace.js';
+import {bindTrials, resetTrials} from './trials.js';
 import {renderMap} from './wafer-map.js';
 
 let data, selected, loadSequence = 0, traceSequence = 0;
@@ -58,6 +59,7 @@ async function open(id = byId('wafer').value) {
   if (token !== loadSequence) return;
   if (data?.wafer.id !== choice) selected = null;
   data = next;
+  resetTrials(choice);
   options(byId('wafer'), wafers.map(item => [item.id, item.id]), choice);
   clearComparison();
   clearPreview();
@@ -70,6 +72,7 @@ function initialize() {
   bindBatch(action, current, open);
   bindCatalog(action, open);
   bindReleases(action, current, open);
+  bindTrials(action, current);
   byId('reload').addEventListener('click', action(() => open()));
   byId('wafer').addEventListener('change', action(event => open(event.target.value)));
   byId('flag-focus').addEventListener('click', () => {

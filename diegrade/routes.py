@@ -1,6 +1,6 @@
 import re
 
-from . import archives, comparison, intake, rules, wafers, workbench
+from . import archives, comparison, intake, rules, trials, wafers, workbench
 from .errors import DomainError
 from .sorter import as_csv
 from .validation import integer
@@ -81,6 +81,31 @@ def archive_action(conn, _, wafer, seq, action):
 @route('GET', r'/wafers/([^/]+)/compare/([0-9]{1,3})/([0-9]{1,3})')
 def differences(conn, _, wafer, first, second):
     return comparison.compare(conn, wafer, int(first), int(second))
+
+
+@route('GET', r'/wafers/([^/]+)/trials')
+def trial_list(conn, _, wafer):
+    return trials.list_trials(conn, wafer)
+
+
+@route('POST', r'/wafers/([^/]+)/trials', write=True)
+def trial_create(conn, body, wafer):
+    return trials.create(conn, wafer, body)
+
+
+@route('GET', r'/wafers/([^/]+)/trials/([^/]+)')
+def trial_detail(conn, _, wafer, trial):
+    return trials.detail(conn, wafer, trial)
+
+
+@route('GET', r'/wafers/([^/]+)/trials/([^/]+)/cells/(-?[0-9]{1,4})/(-?[0-9]{1,4})')
+def trial_cell(conn, _, wafer, trial, x, y):
+    return trials.site_detail(conn, wafer, trial, (int(x), int(y)))
+
+
+@route('POST', r'/wafers/([^/]+)/trials/([^/]+)/batches', write=True)
+def trial_submit(conn, body, wafer, trial):
+    return trials.submit(conn, wafer, trial, body)
 
 
 def dispatch(database, method, path, body):

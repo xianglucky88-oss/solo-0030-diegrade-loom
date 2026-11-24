@@ -6,7 +6,7 @@
 
 规则按名称和版本冻结；登记晶圆时固定物理掩模、保留点与规则正文。每个晶圆有连续增加的现场代次，包含首测或复测批次和逐点复核事件。有效测量引用具体的源批次与设备坐标；一份封存分选版捕获某代完整输入与计划。
 
-`geometry` 定义物理掩模，`frames` 定义设备坐标变换。边缘判定用四邻域；保留点仍算物理邻居。`probe_csv` 解析输入，`batches` 校验批次投影，`grading` 只负责分档规则，`timeline` 用时间上的现场代次约束事件并重建逐点事实。`database`、`events` 提供读一致性与原子追加；`intake` 协调预检和入库。`sorter`、`archives`、`comparison` 分别处理交付行、封存复算和版差。`routes`、`httpd`、`web` 负责传输与操作，不自行重算档位。
+`geometry` 定义物理掩模，`frames` 定义设备坐标变换。边缘判定用四邻域；保留点仍算物理邻居。`probe_csv` 解析输入，`batches` 校验批次投影，`grading` 只负责分档规则，`timeline` 用时间上的现场代次约束事件并重建逐点事实。`database`、`events` 提供读一致性与原子追加；`intake` 协调预检和入库。`sorter`、`archives`、`comparison` 分别处理交付行、封存复算和版差。`trials` 是只读旁路：固定一份已签出原签件和一版备选规则做规则试评，自包含快照存于独立试评表，不回写现场。`routes`、`httpd`、`web` 负责传输与操作，不自行重算档位。
 
 ## 判档和复测
 
@@ -16,6 +16,8 @@
 4. 复测只覆盖当前待复测点，逐行引用最新测量的批次号。已经判档的点只可凭有编号及事由的复核事件重新开启复测。不会丢弃旧事实。
 5. 变更请求使用 `expected` 现场代次。预检运行同套校验但不持久化。实写在 SQLite 写事务内重新验证；任意行违规均不推进代次。在当前代次下重发同一规范内容返回幂等结果，换内容不允许复用编号。
 6. 未测或待复测均阻止签出。已签出版保留原样，下载前校验摘要并重算。两版比较按物理格点关联，区分档位变化和同档的来源变化。
+7. 规则试评固定原签件代次与备选规则版本，复用同一套位姿归一、物理格点校验和判档函数，但只读取封存快照。沿用旧复测须同时证明：复测提交时原父量测仍是该点当前有效量测，且该点在新规则下确实待复测。旧复核能否成立以当时证据为准——历史上的复核在旧规则下必已终判；新规则下若该量测仍为终档，复核只留痕不重开，其后的复测因无待复测父状态而失效。接纳链一旦中断，后续旧记录一律不再采纳，并以最早失去资格的记录开出补测单；历史可接纳但仍待复测、或全无有效历史的点同样发单，单内写明原因。
+8. 探针按带编号的试评补测单送回量测。回来件逐行核对本次试评尚未关闭的补测单和归一后的物理格点，按锁定的备选规则以复测口径判档；任一行引用外单、错点或对不上补测单，本次整批不生效。原样重送幂等不重复入账；开路等仍待复测的结果保留原因、补测单继续等待。试评、补测和重送都不推进晶圆现场代次，不改动原签件，也不生成生产分选指令。
 
 ## 本机 HTTP 接口
 
@@ -33,5 +35,9 @@
 | POST | `/wafers/{id}/releases` | 固定一代分选版 |
 | GET | `/wafers/{id}/releases/{rev}/{replay,manifest,sorter}` | 复算、下载证据包或分选表 |
 | GET | `/wafers/{id}/compare/{old}/{new}` | 同片版差 |
+| GET / POST | `/wafers/{id}/trials` | 试评列表 / 固定签件与备选规则建立试评 |
+| GET | `/wafers/{id}/trials/{tid}` | 试评逐点结论、补测单与回来件 |
+| GET | `/wafers/{id}/trials/{tid}/cells/{x}/{y}` | 单点评审判据与证据链 |
+| POST | `/wafers/{id}/trials/{tid}/batches` | 按补测单原子接收试评回来件 |
 
-批次正文为 `{expected,batch:{id,kind,frame:{offset,turn,mirror},csv}}`；复核正文为 `{expected,id,site,reason}`；签出正文为 `{expected}`。规则与晶圆输入见 `examples/sample.json`。独立测试套件暂缓；`tools.smoke` 对真实入口执行临时 HTTP 工作流。
+批次正文为 `{expected,batch:{id,kind,frame:{offset,turn,mirror},csv}}`；复核正文为 `{expected,id,site,reason}`；签出正文为 `{expected}`。试评建立正文为 `{id,release,rule,rule_version}`，回来件正文为 `{batch:{id,kind:'repeat',frame,csv}}`，CSV 的 `parent` 列填补测单编号。规则与晶圆输入见 `examples/sample.json`。独立测试套件暂缓；`tools.smoke` 对真实入口执行临时 HTTP 工作流，`tools.trial_smoke` 以全边缘晶圆演练试评、补测单与整批拒收。

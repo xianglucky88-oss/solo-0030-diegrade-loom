@@ -2,7 +2,7 @@ from contextlib import contextmanager
 from pathlib import Path
 import sqlite3
 
-from .schema import SQL, VERSION
+from .schema import SQL, TRIAL_SQL, VERSION
 
 
 class Database:
@@ -15,7 +15,15 @@ class Database:
                 for statement in SQL.split(';'):
                     if statement.strip():
                         conn.execute(statement)
-            elif version != VERSION:
+                version = 1
+            if version == 1:
+                # 试评域是只读旁路：新表不触碰现场事件与封存件结构。
+                for statement in TRIAL_SQL.split(';'):
+                    if statement.strip():
+                        conn.execute(statement)
+                conn.execute('PRAGMA user_version = 2')
+                version = 2
+            if version != VERSION:
                 raise RuntimeError(f'不支持数据库结构版本 {version}')
 
     @contextmanager

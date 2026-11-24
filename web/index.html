@@ -43,6 +43,7 @@
         <button type="button" id="tab-hold" data-panel="hold" role="tab" aria-selected="false" aria-controls="hold" tabindex="-1">复核登记</button>
         <button type="button" id="tab-release" data-panel="release" role="tab" aria-selected="false" aria-controls="release" tabindex="-1">分选交付</button>
         <button type="button" id="tab-catalog" data-panel="catalog" role="tab" aria-selected="false" aria-controls="catalog" tabindex="-1">规则与晶圆</button>
+        <button type="button" id="tab-trial" data-panel="trial" role="tab" aria-selected="false" aria-controls="trial" tabindex="-1">规则试评</button>
       </div>
       <section id="batch" role="tabpanel" aria-labelledby="tab-batch">
         <form id="batch-form">
@@ -90,6 +91,34 @@
             <label>晶圆编号 <input name="id" required maxlength="40"></label><label>规则版本 <select name="rule" required></select></label>
           </div><label>物理行段 <textarea name="spans" required rows="2" placeholder="[[0,-1,1],[1,-1,1]]"></textarea></label>
           <label>保留格点 <input name="reserved" value="[]" required></label><button>登记晶圆</button></form>
+        </div>
+      </section>
+      <section id="trial" role="tabpanel" aria-labelledby="tab-trial" hidden>
+        <div class="catalog">
+          <form id="trial-form"><h2>固定试评</h2>
+            <p>试评只读取已签出的原签件，不推进现场代次、不改动原签件、也不产生生产分选指令。</p>
+            <div class="row">
+              <label>试评编号 <input name="id" required maxlength="40" autocomplete="off"></label>
+              <label>原签件代次 <input name="release" type="number" min="1" max="128" required></label>
+              <label>备选规则 <select name="rule" id="trial-rule" required></select></label>
+            </div>
+            <button>建立试评</button>
+          </form>
+          <form id="trial-pick"><h2>试评补测单</h2>
+            <div class="row"><label>选择试评 <select id="trial-select" required></select></label><button type="button" id="trial-refresh">刷新</button></div>
+            <div id="trial-view" class="output"></div>
+          </form>
+          <form id="trial-batch-form"><h2>探针送回试评量测</h2>
+            <div class="row">
+              <label>批次编号 <input name="id" required maxlength="40" autocomplete="off"></label>
+              <label>逆时针旋转 <select name="turn"><option value="0">0°</option><option value="1">90°</option><option value="2">180°</option><option value="3">270°</option></select></label>
+              <label>横向平移 <input type="number" name="dx" value="0" min="-2048" max="2048" required></label>
+              <label>纵向平移 <input type="number" name="dy" value="0" min="-2048" max="2048" required></label>
+              <label class="check"><input type="checkbox" name="mirror"> 横轴镜像</label>
+            </div>
+            <label>探针表内容（parent 填补测单编号） <textarea name="csv" rows="4" required spellcheck="false" placeholder="x,y,contact,leak_na,margin_mv,parent"></textarea></label>
+            <button class="primary">按单送回</button>
+          </form>
         </div>
       </section>
     </section>
