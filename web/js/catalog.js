@@ -16,6 +16,14 @@ function arrayJSON(text, label) {
   throw new Error(`${label}须为 JSON 数组`);
 }
 
+function objectJSON(text, label) {
+  try {
+    const value = JSON.parse(text);
+    if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+  } catch { /* 同一提示覆盖 JSON 语法和顶层类型错误。 */ }
+  throw new Error(`${label}须为 JSON 对象或数组`);
+}
+
 export function bindCatalog(action, open) {
   byId('rule-form').addEventListener('submit', action(async event => {
     const data = new FormData(event.target);
@@ -30,6 +38,8 @@ export function bindCatalog(action, open) {
     if (!rule) throw new Error('请先登记并选择规则版本');
     const payload = {id: data.get('id'), rule, rule_version: Number(version),
       spans: arrayJSON(data.get('spans'), '物理行段'), reserved: arrayJSON(data.get('reserved'), '保留格点')};
+    const zones = String(data.get('zones') || '').trim();
+    if (zones) payload.zones = objectJSON(zones, '分区');
     await request('/wafers', payload);
     await open(payload.id);
     flash(`晶圆 ${payload.id} 已登记`);

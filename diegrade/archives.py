@@ -19,6 +19,8 @@ def load_release(conn, wafer_id, revision):
 def seal(conn, wafer_id, data):
     fields(data, 'expected')
     spec, revision = load_wafer(conn, wafer_id)
+    if spec.get('zones'):
+        raise DomainError('zoned_wafer', '该晶圆已启用分区交付，整片签出已停用，请按区交付', 409)
     events.check_revision(data['expected'], revision)
     try:
         return load_release(conn, wafer_id, revision)

@@ -24,7 +24,8 @@ textarea { width: 100%; resize: vertical; font-family: ui-monospace, monospace; 
 .data td, .data th { text-align: left; border-block-end: 1px solid var(--line); padding: 6px 8px; overflow-wrap: anywhere; }
 .archive { padding: 8px 0; border-bottom: 1px solid var(--line); }
 #compare { margin-top: 10px; }
-#release-status, #hold-site { color: var(--muted); }
+#release-status, #hold-site, .note { color: var(--muted); }
+.note { font-size: .85rem; }
 @media (max-width: 650px) {
   .catalog { grid-template-columns: 1fr; }
   .catalog form + form { border-top: 1px solid var(--line); padding-top: 12px; }

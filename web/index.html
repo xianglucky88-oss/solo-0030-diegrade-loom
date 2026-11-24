@@ -42,6 +42,7 @@
         <button type="button" id="tab-batch" data-panel="batch" role="tab" aria-selected="true" aria-controls="batch">批次预检与导入</button>
         <button type="button" id="tab-hold" data-panel="hold" role="tab" aria-selected="false" aria-controls="hold" tabindex="-1">复核登记</button>
         <button type="button" id="tab-release" data-panel="release" role="tab" aria-selected="false" aria-controls="release" tabindex="-1">分选交付</button>
+        <button type="button" id="tab-zones" data-panel="zones" role="tab" aria-selected="false" aria-controls="zones" tabindex="-1">分区交付</button>
         <button type="button" id="tab-catalog" data-panel="catalog" role="tab" aria-selected="false" aria-controls="catalog" tabindex="-1">规则与晶圆</button>
       </div>
       <section id="batch" role="tabpanel" aria-labelledby="tab-batch">
@@ -70,11 +71,27 @@
       </section>
       <section id="release" role="tabpanel" aria-labelledby="tab-release" hidden>
         <div class="row"><button id="seal" class="primary" type="button">签出当前版</button><span id="release-status"></span></div>
+        <p id="release-zoned" class="note" hidden>本片已启用分区交付：整片签出停用，请到「分区交付」逐区准备与交付。</p>
         <div id="archives"></div>
         <form id="compare" class="row compact">
           <label>旧版 <select name="older" required></select></label><label>新版 <select name="newer" required></select></label><button>比较两版</button>
         </form>
         <div id="comparison" class="output"></div>
+      </section>
+      <section id="zones" role="tabpanel" aria-labelledby="tab-zones" hidden>
+        <div id="zone-summary"></div>
+        <div class="row"><label>交付区 <select id="zone-pick" required></select></label>
+          <button id="zone-plan" class="primary" type="button">准备待交付方案</button>
+          <button id="zone-review" type="button">查看方案核对视图</button>
+          <button id="zone-release" type="button">正式交付本区</button>
+        </div>
+        <p id="zone-status" class="note"></p>
+        <div id="zone-plan-view" class="output"></div>
+        <h2>整片交接清册</h2>
+        <div class="row"><button id="ledger-get" type="button">取交接清册</button>
+          <a id="ledger-manifest" class="action" hidden>清册 JSON</a><a id="ledger-sorter" class="action" hidden>清册分拣表</a></div>
+        <p class="note">交接清册只标明各正式件交付了哪一档；它不是可执行的整片分选清单。</p>
+        <div id="ledger-view" class="output"></div>
       </section>
       <section id="catalog" role="tabpanel" aria-labelledby="tab-catalog" hidden>
         <div class="catalog">
@@ -89,7 +106,9 @@
           <form id="wafer-form"><h2>登记晶圆</h2><div class="row">
             <label>晶圆编号 <input name="id" required maxlength="40"></label><label>规则版本 <select name="rule" required></select></label>
           </div><label>物理行段 <textarea name="spans" required rows="2" placeholder="[[0,-1,1],[1,-1,1]]"></textarea></label>
-          <label>保留格点 <input name="reserved" value="[]" required></label><button>登记晶圆</button></form>
+          <label>保留格点 <input name="reserved" value="[]" required></label>
+          <label>分区（可选 JSON） <textarea name="zones" rows="2" placeholder="留空表示整片交付；如 {&quot;A&quot;:[[0,0]],&quot;B&quot;:[[-1,-1],[1,-1]]}"></textarea></label>
+          <button>登记晶圆</button></form>
         </div>
       </section>
     </section>

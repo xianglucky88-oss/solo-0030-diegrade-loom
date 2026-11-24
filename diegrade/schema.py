@@ -1,4 +1,4 @@
-VERSION = 1
+VERSION = 2
 
 SQL = '''
 CREATE TABLE rules (
@@ -18,5 +18,29 @@ CREATE TABLE releases (
     wafer TEXT NOT NULL REFERENCES wafers(id), revision INTEGER NOT NULL, body TEXT NOT NULL,
     PRIMARY KEY (wafer, revision)
 );
-PRAGMA user_version = 1;
+CREATE TABLE zone_plans (
+    wafer TEXT NOT NULL REFERENCES wafers(id), zone TEXT NOT NULL, seq INTEGER NOT NULL,
+    sha256 TEXT NOT NULL, body TEXT NOT NULL,
+    PRIMARY KEY (wafer, zone, seq), UNIQUE (wafer, zone, sha256)
+);
+CREATE TABLE zone_releases (
+    wafer TEXT NOT NULL REFERENCES wafers(id), zone TEXT NOT NULL,
+    sha256 TEXT NOT NULL, body TEXT NOT NULL,
+    PRIMARY KEY (wafer, zone)
+);
+PRAGMA user_version = 2;
+'''
+
+MIGRATE_1_TO_2 = '''
+CREATE TABLE zone_plans (
+    wafer TEXT NOT NULL REFERENCES wafers(id), zone TEXT NOT NULL, seq INTEGER NOT NULL,
+    sha256 TEXT NOT NULL, body TEXT NOT NULL,
+    PRIMARY KEY (wafer, zone, seq), UNIQUE (wafer, zone, sha256)
+);
+CREATE TABLE zone_releases (
+    wafer TEXT NOT NULL REFERENCES wafers(id), zone TEXT NOT NULL,
+    sha256 TEXT NOT NULL, body TEXT NOT NULL,
+    PRIMARY KEY (wafer, zone)
+);
+PRAGMA user_version = 2;
 '''

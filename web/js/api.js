@@ -22,3 +22,7 @@ export async function request(path, body) {
 export function downloadURL(id, revision, format) {
   return prefix + waferPath(id, `/releases/${revision}/${format}`);
 }
+
+export function assetURL(id, suffix) {
+  return prefix + waferPath(id, suffix);
+}

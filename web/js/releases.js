@@ -12,8 +12,8 @@ export function renderReleases(data, action) {
   const list = byId('archives');
   const form = byId('compare');
   const releases = (data?.releases ?? []);
-  byId('seal').disabled = !data?.ready;
-  byId('release-status').textContent = !data ? '尚未选择晶圆' : data.ready ? '全片分档完成' : '有未测或待复测格点';
+  byId('seal').disabled = !data?.ready || Boolean(data?.zoned);
+  byId('release-status').textContent = !data ? '尚未选择晶圆' : data.zoned ? '分区交付已启用' : data.ready ? '全片分档完成' : '有未测或待复测格点';
   list.replaceChildren(...releases.map(seq => {
     const row = node('div', undefined, 'archive row');
     const replay = node('button', '复算');

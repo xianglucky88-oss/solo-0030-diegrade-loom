@@ -15,6 +15,12 @@
     {"workflow_id":"replay","command":"python3 -B -m tools.smoke --through replay"},
     {"workflow_id":"export","command":"python3 -B -m tools.smoke --through export"},
     {"workflow_id":"hold","command":"python3 -B -m tools.smoke --through hold"},
-    {"workflow_id":"compare","command":"python3 -B -m tools.smoke --through compare"}
+    {"workflow_id":"compare","command":"python3 -B -m tools.smoke --through compare"},
+    {"workflow_id":"zones","command":"python3 -B -m tools.smoke --through zone_rule"},
+    {"workflow_id":"zone-plan","command":"python3 -B -m tools.smoke --through zone_workflow"},
+    {"workflow_id":"zone-release","command":"python3 -B -m tools.smoke --through zone_history"},
+    {"workflow_id":"zone-ledger","command":"python3 -B -m tools.smoke --through zone_source_swap"},
+    {"workflow_id":"zone-ledger-verify","command":"python3 -B -m tools.smoke --through zone_ledger_forged"},
+    {"workflow_id":"legacy-whole","command":"python3 -B -m tools.smoke --through zone_legacy"}
   ]
 }

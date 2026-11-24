@@ -6,7 +6,7 @@
 
 规则按名称和版本冻结；登记晶圆时固定物理掩模、保留点与规则正文。每个晶圆有连续增加的现场代次，包含首测或复测批次和逐点复核事件。有效测量引用具体的源批次与设备坐标；一份封存分选版捕获某代完整输入与计划。
 
-`geometry` 定义物理掩模，`frames` 定义设备坐标变换。边缘判定用四邻域；保留点仍算物理邻居。`probe_csv` 解析输入，`batches` 校验批次投影，`grading` 只负责分档规则，`timeline` 用时间上的现场代次约束事件并重建逐点事实。`database`、`events` 提供读一致性与原子追加；`intake` 协调预检和入库。`sorter`、`archives`、`comparison` 分别处理交付行、封存复算和版差。`routes`、`httpd`、`web` 负责传输与操作，不自行重算档位。
+`geometry` 定义物理掩模，`frames` 定义设备坐标变换。边缘判定用四邻域；保留点仍算物理邻居。`probe_csv` 解析输入，`batches` 校验批次投影，`grading` 只负责分档规则，`timeline` 用时间上的现场代次约束事件并重建逐点事实。`database`、`events` 提供读一致性与原子追加；`intake` 协调预检和入库。`sorter`、`archives`、`comparison` 分别处理交付行、封存复算和版差。`partition`、`zones` 处理分区交付、待交付方案与整片交接清册。`routes`、`httpd`、`web` 负责传输与操作，不自行重算档位。
 
 ## 判档和复测
 
@@ -16,6 +16,15 @@
 4. 复测只覆盖当前待复测点，逐行引用最新测量的批次号。已经判档的点只可凭有编号及事由的复核事件重新开启复测。不会丢弃旧事实。
 5. 变更请求使用 `expected` 现场代次。预检运行同套校验但不持久化。实写在 SQLite 写事务内重新验证；任意行违规均不推进代次。在当前代次下重发同一规范内容返回幂等结果，换内容不允许复用编号。
 6. 未测或待复测均阻止签出。已签出版保留原样，下载前校验摘要并重算。两版比较按物理格点关联，区分档位变化和同档的来源变化。
+
+## 分区交付
+
+1. 分区在登记晶圆时随 `zones` 冻结，或对尚无整片分选版的晶圆用 `POST /wafers/{id}/zones` 启用；启用后不可改划。分区互不重叠，且恰好覆盖全部可测格点；保留点不进入任何分区，也不进入任何分选表，但仍是物理邻居，分区边界不改变边缘判定。
+2. 每区在该区所有点终判后可准备待交付方案，冻结逐点档位、有效量测批次与现场代次。方案只有核对视图 `GET /wafers/{id}/zone-plans/{zone}/{seq}`，不输出分选行；分选段从交付入口取不到可执行清单。
+3. 正式交付 `POST /wafers/{id}/zone-releases` 在首次落库前重新确认本区各点仍为终判且仍使用方案冻结的同一份量测。其他区变化不影响本区；本区同档换源（批次或代次改变）也使旧方案失效，须重新准备。在响应丢失后重试或同时提交，只要引用同一方案就只产生一个正式交付件；换方案再交付被拒绝。
+4. 正式交付后可重取同一份分选件与证据；后续复测改档不改变已冻结件，也不得为本区生成第二份可执行清单。启用分区的晶圆停用整片签出与整片下载，不能绕过此约束。
+5. 各区都正式交付后可取整片交接清册。它按物理格点标出哪个正式件的哪一区交付了哪一档，并附完整正式件与晶圆正文供离线核对；它不是可执行的整片分选清单。核对会复算随附正式件摘要、逐格点归属与全片覆盖，重复、缺失或冒用格点均被拒绝。
+6. 未启用分区的晶圆照旧整片签出、下载与复算。
 
 ## 本机 HTTP 接口
 
@@ -31,7 +40,15 @@
 | POST | `/wafers/{id}/batches` | 原子写入批次 |
 | POST | `/wafers/{id}/holds` | 逐点复核并重新开放复测 |
 | POST | `/wafers/{id}/releases` | 固定一代分选版 |
-| GET | `/wafers/{id}/releases/{rev}/{replay,manifest,sorter}` | 复算、下载证据包或分选表 |
+| GET | `/wafers/{id}/releases/{rev}/{replay,manifest,sorter}` | 复算、下载证据包或分选表（未启用分区的晶圆） |
 | GET | `/wafers/{id}/compare/{old}/{new}` | 同片版差 |
+| GET / POST | `/wafers/{id}/zones` | 查看已冻结分区 / 为尚无整片分选版的晶圆启用分区 |
+| POST | `/wafers/{id}/zone-plans` | 准备某区待交付方案 |
+| GET | `/wafers/{id}/zone-plans/{zone}/{seq}` | 方案核对视图，不含分选行 |
+| POST | `/wafers/{id}/zone-releases` | 某区首次正式交付；同方案重试幂等 |
+| GET | `/wafers/{id}/zone-releases/{zone}/{manifest,sorter}` | 重取已冻结的正式交付件 |
+| GET | `/wafers/{id}/zone-ledger` | 整片交接清册（JSON） |
+| GET | `/wafers/{id}/zone-ledger/{manifest,csv}` | 清册证据包与逐格点交接表 |
+| GET / POST | `/wafers/{id}/zone-ledger/verify` | 当前清册复算 / 校验提交的清册 |
 
-批次正文为 `{expected,batch:{id,kind,frame:{offset,turn,mirror},csv}}`；复核正文为 `{expected,id,site,reason}`；签出正文为 `{expected}`。规则与晶圆输入见 `examples/sample.json`。独立测试套件暂缓；`tools.smoke` 对真实入口执行临时 HTTP 工作流。
+批次正文为 `{expected,batch:{id,kind,frame:{offset,turn,mirror},csv}}`；复核正文为 `{expected,id,site,reason}`；整片签出正文为 `{expected}`；分区启用为 `{expected,zones}`；准备方案为 `{expected,zone}`；分区正式交付为 `{expected,zone,plan}`；清册校验为清册本身。晶圆登记可附 `zones`，形态为编号到格点数组（或 `{sites}`/`{spans}`）的映射，或带 `id` 的分区列表。规则与晶圆输入见 `examples/sample.json`。独立测试套件暂缓；`tools.smoke` 对真实入口执行临时 HTTP 工作流。

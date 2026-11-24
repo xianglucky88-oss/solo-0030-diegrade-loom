@@ -7,6 +7,7 @@ import {bindReleases, clearComparison, renderReleases} from './releases.js';
 import {flash, renderCounters} from './status.js';
 import {renderTrace} from './trace.js';
 import {renderMap} from './wafer-map.js';
+import {bindZones, clearZones, renderZones} from './zones.js';
 
 let data, selected, loadSequence = 0, traceSequence = 0;
 
@@ -46,6 +47,7 @@ function render(data) {
   renderMap(data, selected, pick);
   renderTrace(null);
   renderReleases(data, action);
+  renderZones(data, action);
   byId('flag-focus').disabled = !data?.cells.some(c => c.state === 'missing' || c.state === 'review');
 }
 
@@ -61,6 +63,7 @@ async function open(id = byId('wafer').value) {
   options(byId('wafer'), wafers.map(item => [item.id, item.id]), choice);
   clearComparison();
   clearPreview();
+  clearZones();
   render(data);
   if (selected) await pick(selected);
 }
@@ -70,6 +73,7 @@ function initialize() {
   bindBatch(action, current, open);
   bindCatalog(action, open);
   bindReleases(action, current, open);
+  bindZones(action, current, open);
   byId('reload').addEventListener('click', action(() => open()));
   byId('wafer').addEventListener('change', action(event => open(event.target.value)));
   byId('flag-focus').addEventListener('click', () => {

@@ -154,12 +154,158 @@ def compare(s):
     assert s.wafer('/releases/2/sorter') == s.old_bytes
 
 
-STEPS = (rules, wafer, preview, ingest, grid, trace, seal, replay, export, hold, compare)
+ZONE = '/api/diegrade/wafers/ZW-01'
+ZONE_HEADER = HEADER
+ZONE_RULE = {'name': 'slice', 'version': 1, 'leak_limit': 100, 'margin_min': 50,
+             'grade_a': 75, 'edge_add': 10, 'guard': 3}
+ZONE_B = [[-1, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]]
+TEMPER = [[-1, -1, 1], [0, -1, 1], [1, -1, 1]]
+
+
+def zone_rule(s):
+    s.request('/api/diegrade/rules', ZONE_RULE)
+    shape = {'id': 'ZW-01', 'spans': TEMPER, 'reserved': [[0, -1]],
+             'rule': 'slice', 'rule_version': 1, 'zones': {'A': [[0, 0]], 'B': ZONE_B}}
+    s.request('/api/diegrade/wafers', {**shape, 'id': 'ZW-02', 'zones': {'A': [[0, 0]], 'B': ZONE_B[:-1]}},
+              (422, 'zone_coverage'))
+    s.request('/api/diegrade/wafers', {**shape, 'id': 'ZW-03', 'zones': {'A': [[0, 0], [1, 0]], 'B': ZONE_B + [[0, 0]]}},
+              (422, 'zone_overlap'))
+    s.request('/api/diegrade/wafers', {**shape, 'id': 'ZW-04', 'zones': {'A': [[0, -1]], 'B': ZONE_B}},
+              (422, 'zone_reserved'))
+    s.request('/api/diegrade/wafers', shape)
+    listed = s.request('/api/diegrade/wafers/ZW-01/zones')
+    assert [(zone['id'], zone['count']) for zone in listed['zones']] == [('A', 1), ('B', 7)]
+    assert listed['testable'] == 8
+    # 分区不改变边缘判定，保留点仍是物理邻居：中央 P 为内点。
+    assert s.request('/api/diegrade/wafers/ZW-01/cells/0/0')['edge'] is False
+    assert s.request('/api/diegrade/wafers/ZW-01/cells/1/1')['edge'] is True
+    s.request('/api/diegrade/wafers/ZW-01/zone-plans', {'expected': 0, 'zone': 'A'}, (409, 'zone_not_ready'))
+
+
+def zone_workflow(s):
+    base = ZONE
+    screen = lambda ident, rows, expected, kind='screen': s.request(base + '/batches', {'expected': expected, 'batch': {
+        'id': ident, 'kind': kind, 'frame': {'offset': [0, 0], 'turn': 0, 'mirror': False},
+        'csv': ZONE_HEADER + rows}})
+    assert screen('S01', '0,0,ok,10,78,\n', 0)['changes'] == [{'site': [0, 0], 'state': 'a'}]
+    plan = s.request(base + '/zone-plans', {'expected': 1, 'zone': 'A'})
+    assert plan['seq'] == 1 and plan['sites'] == 1 and not plan['duplicate']
+    assert s.request(base + '/zone-plans', {'expected': 1, 'zone': 'A'})['duplicate']
+    review = s.request(base + '/zone-plans/A/1')
+    assert review['stale'] is False and review['entries'][0]['bin'] == 'a'
+    s.request(base + '/releases', {'expected': 1}, (409, 'zoned_wafer'))
+    screen('S02', '-1,-1,ok,10,80,\n', 1)
+    first = s.request(base + '/zone-releases', {'expected': 2, 'zone': 'A', 'plan': 1})
+    assert first['rows'] == 1 and not first['duplicate']
+    retried = s.request(base + '/zone-releases', {'expected': 2, 'zone': 'A', 'plan': 1})
+    assert retried['duplicate'] and retried['sha256'] == first['sha256']
+    assert s.request(base + '/zone-releases/A/sorter') == b'x,y,bin,batch\n0,0,a,S01\n'
+    assert json.loads(s.request(base + '/zone-releases/A/manifest'))['payload']['records'][0]['batch'] == 'S01'
+    assert s.request(base + '/zone-ledger', error=(409, 'zone_incomplete'))
+    rows = ''.join(f'{x},{y},ok,10,80,\n' for x, y in ZONE_B if (x, y) != (-1, -1))
+    screen('S03', rows, 2)
+    plan_b = s.request(base + '/zone-plans', {'expected': 3, 'zone': 'B'})
+    s.request(base + '/zone-releases', {'expected': 3, 'zone': 'B', 'plan': plan_b['seq']})
+    ledger = json.loads(s.request(base + '/zone-ledger/manifest'))
+    assert s.request(base + '/zone-ledger/verify', ledger)['cells'] == 8
+    assert [cell['bin'] for cell in ledger['payload']['cells'] if cell['site'] == [0, 0]] == ['a']
+    forged = json.loads(json.dumps(ledger))
+    a_cell = next(c for c in forged['payload']['cells'] if c['zone'] == 'A')
+    for cell in forged['payload']['cells']:
+        if cell['zone'] == 'B':
+            cell.update(a_cell)
+            break
+    from diegrade.codec import digest
+    forged['sha256'] = digest(forged['payload'])
+    s.request(base + '/zone-ledger/verify', forged, (409, 'ledger_overlap'))
+    assert len(forged['payload']['cells']) == len(ledger['payload']['cells'])
+
+
+def zone_history(s):
+    base = ZONE
+    plan = s.request(base + '/zone-plans', {'expected': 3, 'zone': 'A'})
+    s.request(base + '/holds', {'expected': 3, 'id': 'H1', 'site': [0, 0], 'reason': '复测'})
+    s.request(base + '/batches', {'expected': 4, 'batch': {
+        'id': 'R01', 'kind': 'repeat', 'frame': {'offset': [0, 0], 'turn': 0, 'mirror': False},
+        'csv': ZONE_HEADER + '0,0,ok,10,65,S01\n'}})
+    assert s.request(base + '/cells/0/0')['state'] == 'b'
+    s.rev = 5
+    assert s.request(base + '/zone-releases/A/sorter') == b'x,y,bin,batch\n0,0,a,S01\n'
+    fresh = s.request(base + '/zone-plans', {'expected': 5, 'zone': 'A'})
+    assert fresh['seq'] == 2 and not fresh['duplicate']
+    s.request(base + '/zone-releases', {'expected': 5, 'zone': 'A', 'plan': fresh['seq']}, (409, 'zone_released'))
+    assert s.request(base + '/zone-releases/A/sorter') == b'x,y,bin,batch\n0,0,a,S01\n'
+    assert s.request(base + '/zone-plans/A/2')['entries'][0]['bin'] == 'b'
+    assert plan['seq'] == 1
+
+
+def zone_source_swap(s):
+    """同档换源：旧方案失效，必须重新准备。"""
+    base = '/api/diegrade/wafers/ZW-11'
+    request = s.request
+    request('/api/diegrade/wafers', {'id': 'ZW-11', 'spans': TEMPER, 'reserved': [[0, -1]],
+                                     'rule': 'slice', 'rule_version': 1, 'zones': {'A': [[0, 0]], 'B': ZONE_B}})
+    request(base + '/batches', {'expected': 0, 'batch': {
+        'id': 'S01', 'kind': 'screen', 'frame': {'offset': [0, 0], 'turn': 0, 'mirror': False},
+        'csv': ZONE_HEADER + '0,0,ok,10,78,\n'}})
+    plan = request(base + '/zone-plans', {'expected': 1, 'zone': 'A'})
+    request(base + '/holds', {'expected': 1, 'id': 'H1', 'site': [0, 0], 'reason': '复核'})
+    request(base + '/batches', {'expected': 2, 'batch': {
+        'id': 'R01', 'kind': 'repeat', 'frame': {'offset': [0, 0], 'turn': 0, 'mirror': False},
+        'csv': ZONE_HEADER + '0,0,ok,10,76,S01\n'}})
+    assert request(base + '/cells/0/0')['state'] == 'a'
+    assert request(base + '/zone-plans/A/1')['stale'] is True
+    request(base + '/zone-releases', {'expected': 3, 'zone': 'A', 'plan': plan['seq']}, (409, 'plan_stale'))
+    fresh = request(base + '/zone-plans', {'expected': 3, 'zone': 'A'})
+    assert fresh['seq'] == 2 and not fresh['duplicate']
+    assert request(base + '/zone-releases', {'expected': 3, 'zone': 'A', 'plan': 2})['rows'] == 1
+    assert request(base + '/zone-releases/A/sorter') == b'x,y,bin,batch\n0,0,a,R01\n'
+
+
+def zone_ledger_forged(s):
+    """清册总行数不变，却把 B 的一个格点换成重复的 A 格点：复算必须拒绝。"""
+    base = ZONE
+    ledger = json.loads(s.request(base + '/zone-ledger/manifest'))
+    forged = json.loads(json.dumps(ledger))
+    a_cell = next(cell for cell in forged['payload']['cells'] if cell['zone'] == 'A')
+    for cell in forged['payload']['cells']:
+        if cell['zone'] == 'B':
+            cell.update(a_cell)
+            break
+    from diegrade.codec import digest
+    forged['sha256'] = digest(forged['payload'])
+    assert len(forged['payload']['cells']) == len(ledger['payload']['cells'])
+    s.request(base + '/zone-ledger/verify', forged, (409, 'ledger_overlap'))
+    # 随附正式件本身也被改写时，即便重算外层摘要也拒绝。
+    tampered = json.loads(json.dumps(ledger))
+    b_piece = next(piece for piece in tampered['payload']['zones'] if piece['zone'] == 'B')
+    b_piece['release']['records'][0]['bin'] = 'a'
+    tampered['sha256'] = digest(tampered['payload'])
+    s.request(base + '/zone-ledger/verify', tampered, (409, 'zone_release_digest'))
+
+
+def zone_legacy(s):
+    """未启用分区的晶圆照常整片签出和复算。"""
+    s.request('/api/diegrade/wafers', {'id': 'WZ-01', 'spans': [[0, 0, 0]], 'reserved': [],
+                                       'rule': 'slice', 'rule_version': 1})
+    base = '/api/diegrade/wafers/WZ-01'
+    s.request(base + '/batches', {'expected': 0, 'batch': {
+        'id': 'S01', 'kind': 'screen', 'frame': {'offset': [0, 0], 'turn': 0, 'mirror': False},
+        'csv': ZONE_HEADER + '0,0,ok,10,90,\n'}})
+    sealed = s.request(base + '/releases', {'expected': 1})
+    assert s.request(base + '/releases/1/replay')['rows'] == 1
+    assert s.request(base + '/releases/1/sorter') == b'x,y,bin,batch\n0,0,a,S01\n'
+    assert s.request(base + '/zones')['zoned'] is False
+    assert sealed['sha256'] == s.request(base + '/releases/1/replay')['sha256']
+
+
+STEPS = (rules, wafer, preview, ingest, grid, trace, seal, replay, export, hold, compare,
+         zone_rule, zone_workflow, zone_history, zone_source_swap, zone_ledger_forged, zone_legacy)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--through', choices=[flow.__name__ for flow in STEPS], default='compare')
+    parser.add_argument('--through', choices=[flow.__name__ for flow in STEPS], default=STEPS[-1].__name__)
     args = parser.parse_args()
     with TemporaryDirectory(prefix='diegrade-smoke-') as temp, make_server(Database(Path(temp) / 'db'), 0) as server:
         worker = Thread(target=server.serve_forever, daemon=True)
