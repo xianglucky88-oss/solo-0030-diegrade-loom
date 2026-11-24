@@ -27,6 +27,7 @@ export function bindBatch(action, current, reload) {
     const id = wafer.id;
     const batch = {id: values.get('id'), kind: values.get('kind'), csv: values.get('csv'),
       frame: {offset: [Number(values.get('dx')), Number(values.get('dy'))], turn: Number(values.get('turn')), mirror: values.has('mirror')}};
+    if (wafer.conditions) batch.condition = values.get('condition');
     clearPreview();
     const outcome = await request(waferPath(id, `/${mode}`), {expected: revision, batch});
     if (mode === 'batches') {

@@ -33,11 +33,21 @@ def intake(conn, wafer_id, data, write):
 
 
 def hold(conn, wafer_id, data):
-    fields(data, 'expected', 'id', 'site', 'reason')
+    spec, revision = load_wafer(conn, wafer_id)
+    if 'conditions' in spec:
+        fields(data, 'expected', 'id', 'site', 'condition', 'reason')
+        condition = identifier(data['condition'])
+        if condition not in spec['conditions']:
+            raise DomainError('condition', '量测条件不属于本片晶圆')
+    else:
+        fields(data, 'expected', 'id', 'site', 'reason')
+        condition = None
     site = point(data['site'])
     hold_id = identifier(data['id'])
     body = {'id': hold_id, 'site': list(site), 'reason': reason(data['reason'])}
-    timeline, revision = current(conn, wafer_id)
+    if condition is not None:
+        body['condition'] = condition
+    timeline = replay_timeline(spec, events.read(conn, wafer_id))
     events.check_revision(data['expected'], revision)
     old = events.find(conn, wafer_id, 'hold', hold_id)
     if old:

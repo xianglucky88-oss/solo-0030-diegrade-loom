@@ -17,6 +17,13 @@
 5. 变更请求使用 `expected` 现场代次。预检运行同套校验但不持久化。实写在 SQLite 写事务内重新验证；任意行违规均不推进代次。在当前代次下重发同一规范内容返回幂等结果，换内容不允许复用编号。
 6. 未测或待复测均阻止签出。已签出版保留原样，下载前校验摘要并重算。两版比较按物理格点关联，区分档位变化和同档的来源变化。
 
+## 双条件模式
+
+1. 登记晶圆时附加 `conditions`（两个不同的量测条件名）与 `margin_gap`（裕量差上限 mV）即锁定双条件模式；缺省为单条件晶圆，流程与证据格式不变。
+2. 双条件晶圆的批次与复核必须指定 `condition`；单条件晶圆不接受该字段。每个条件独立沿用第 3–4 条：首测只不可覆盖同条件记录，复测只接同一格点、同一条件当时最新的待复测证据，复核只重开指定条件。
+3. 同一物理格点归一到两种条件的证据才配对。任一边缺测或待复测，该颗不能终判。两边都终判后：任一边判退或两份有效裕量的绝对差严格超过 `margin_gap`，整颗判退；其余双甲得甲，剩下得乙。
+4. 格点证据给出每条件的状态、批次与裕量，可识别阻签的是哪个条件。双条件分选版使用 `diegrade.release.2`，分选行按条件给出批次与裕量；证据包仍含完整现场事件与登记规则，接收方可独立复算。
+
 ## 本机 HTTP 接口
 
 前缀为 `/api/diegrade`；除文件下载外使用 UTF-8 JSON。典型校验失败返回 422，已存在记录或现场代次冲突返回 409，未找到返回 404。
@@ -34,4 +41,4 @@
 | GET | `/wafers/{id}/releases/{rev}/{replay,manifest,sorter}` | 复算、下载证据包或分选表 |
 | GET | `/wafers/{id}/compare/{old}/{new}` | 同片版差 |
 
-批次正文为 `{expected,batch:{id,kind,frame:{offset,turn,mirror},csv}}`；复核正文为 `{expected,id,site,reason}`；签出正文为 `{expected}`。规则与晶圆输入见 `examples/sample.json`。独立测试套件暂缓；`tools.smoke` 对真实入口执行临时 HTTP 工作流。
+批次正文为 `{expected,batch:{id,kind,frame:{offset,turn,mirror},csv}}`，双条件晶圆加 `batch.condition`；复核正文为 `{expected,id,site,reason}`，双条件晶圆加 `condition`；签出正文为 `{expected}`。规则与晶圆输入见 `examples/sample.json`。独立测试套件暂缓；`tools.smoke` 对真实入口执行临时 HTTP 工作流。

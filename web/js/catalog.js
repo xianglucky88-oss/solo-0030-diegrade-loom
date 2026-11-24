@@ -30,6 +30,10 @@ export function bindCatalog(action, open) {
     if (!rule) throw new Error('请先登记并选择规则版本');
     const payload = {id: data.get('id'), rule, rule_version: Number(version),
       spans: arrayJSON(data.get('spans'), '物理行段'), reserved: arrayJSON(data.get('reserved'), '保留格点')};
+    if (data.get('dual')) {
+      payload.conditions = [data.get('cond_a'), data.get('cond_b')];
+      payload.margin_gap = Number(data.get('margin_gap'));
+    }
     await request('/wafers', payload);
     await open(payload.id);
     flash(`晶圆 ${payload.id} 已登记`);

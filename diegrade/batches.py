@@ -6,12 +6,20 @@ from .validation import fields, identifier
 
 
 def prepare(data):
-    fields(data, 'id', 'kind', 'frame', 'csv')
+    if isinstance(data, dict) and 'condition' in data:
+        fields(data, 'id', 'kind', 'condition', 'frame', 'csv')
+        condition = identifier(data['condition'])
+    else:
+        fields(data, 'id', 'kind', 'frame', 'csv')
+        condition = None
     identifier(data['id'])
     if data['kind'] not in ('screen', 'repeat'):
         raise DomainError('kind', '批次须为首测或复测')
-    return {'id': data['id'], 'kind': data['kind'], 'frame': frame(data['frame']),
-            'rows': sorted(parse(data['csv'], data['kind']), key=lambda row: (row['y'], row['x']))}
+    batch = {'id': data['id'], 'kind': data['kind'], 'frame': frame(data['frame']),
+             'rows': sorted(parse(data['csv'], data['kind']), key=lambda row: (row['y'], row['x']))}
+    if condition is not None:
+        batch['condition'] = condition
+    return batch
 
 
 def map_sites(batch, physical, reserved):

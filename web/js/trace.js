@@ -13,14 +13,22 @@ export function renderTrace(cell) {
   const revision = node('div', `第 ${cell.revision} 代 · ${cell.edge ? '边缘格点' : '内部格点'}`, 'trace-info');
   panel.replaceChildren(heading, revision);
   byId('hold-site').textContent = `${site} · ${labels[cell.state]}`;
+  if (cell.conditions) {
+    const parts = Object.entries(cell.conditions).map(([name, part]) => {
+      const margin = part.margin_mv === null ? '' : ` · 裕量 ${part.margin_mv} mV`;
+      return `条件 ${name}：${labels[part.state]}${part.batch ? ` · ${part.batch}` : ''}${margin}`;
+    });
+    panel.append(node('div', parts.join('；'), 'trace-info'));
+  }
   if (!cell.chain.length) {
     panel.append(node('p', '没有探针记录'));
     return;
   }
   const list = node('ol', undefined, 'chain');
   for (const event of cell.chain) {
+    const condition = event.condition ? ` · 条件 ${event.condition}` : '';
     const entry = node('li');
-    entry.append(node('strong', event.event === 'hold' ? `第 ${event.revision} 代 · 复核` : `${event.batch} · ${labels[event.state]}`));
+    entry.append(node('strong', event.event === 'hold' ? `第 ${event.revision} 代 · 复核${condition}` : `${event.batch} · ${labels[event.state]}${condition}`));
     entry.append(node('span', event.why));
     if (event.record) {
       const row = event.record;

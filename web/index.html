@@ -49,6 +49,7 @@
           <div class="row">
             <label>批次编号 <input name="id" required maxlength="40" autocomplete="off"></label>
             <label>测量类型 <select name="kind"><option value="screen">首测</option><option value="repeat">复测</option></select></label>
+            <label id="batch-condition" hidden>量测条件 <select name="condition"></select></label>
             <label>逆时针旋转 <select name="turn"><option value="0">0°</option><option value="1">90°</option><option value="2">180°</option><option value="3">270°</option></select></label>
             <label>横向平移 <input type="number" name="dx" value="0" min="-2048" max="2048" required></label>
             <label>纵向平移 <input type="number" name="dy" value="0" min="-2048" max="2048" required></label>
@@ -64,7 +65,7 @@
         <form id="hold-form">
           <h2>重新开启复测</h2>
           <p id="hold-site">尚未选中格点</p>
-          <div class="row"><label>复核编号 <input name="id" required maxlength="40"></label><label class="wide">复核事由 <input name="reason" required maxlength="240"></label></div>
+          <div class="row"><label>复核编号 <input name="id" required maxlength="40"></label><label id="hold-condition" hidden>量测条件 <select name="condition"></select></label><label class="wide">复核事由 <input name="reason" required maxlength="240"></label></div>
           <button class="primary">登记复核</button>
         </form>
       </section>
@@ -89,7 +90,12 @@
           <form id="wafer-form"><h2>登记晶圆</h2><div class="row">
             <label>晶圆编号 <input name="id" required maxlength="40"></label><label>规则版本 <select name="rule" required></select></label>
           </div><label>物理行段 <textarea name="spans" required rows="2" placeholder="[[0,-1,1],[1,-1,1]]"></textarea></label>
-          <label>保留格点 <input name="reserved" value="[]" required></label><button>登记晶圆</button></form>
+          <label>保留格点 <input name="reserved" value="[]" required></label>
+          <div class="row"><label class="check"><input type="checkbox" name="dual"> 双条件模式</label>
+            <label>条件一 <input name="cond_a" maxlength="40" value="A"></label>
+            <label>条件二 <input name="cond_b" maxlength="40" value="B"></label>
+            <label>裕量差上限（mV） <input name="margin_gap" type="number" min="0" max="10000" value="10"></label>
+          </div><button>登记晶圆</button></form>
         </div>
       </section>
     </section>

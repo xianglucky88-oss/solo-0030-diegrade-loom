@@ -38,10 +38,22 @@ const pick = action(async site => {
   renderTrace(cell);
 });
 
+function syncConditions(conds) {
+  for (const id of ['batch-condition', 'hold-condition']) {
+    const row = byId(id);
+    row.hidden = !conds;
+    if (conds) options(row.querySelector('select'), conds.map(name => [name, name]), row.querySelector('select').value);
+  }
+}
+
 function render(data) {
   byId('wafer-title').textContent = data?.wafer.id ?? '晶圆工作区';
   const rule = data?.wafer.rule;
-  byId('wafer-meta').textContent = data ? `第 ${data.revision} 代 · ${rule.name} / 第 ${rule.version} 版` : '';
+  const conds = data?.wafer.conditions;
+  byId('wafer-meta').textContent = data
+    ? `第 ${data.revision} 代 · ${rule.name} / 第 ${rule.version} 版${conds ? ` · 双条件 ${conds.join(' + ')} · 裕量差上限 ${data.wafer.margin_gap} mV` : ''}`
+    : '';
+  syncConditions(conds);
   renderCounters(data);
   renderMap(data, selected, pick);
   renderTrace(null);
@@ -84,7 +96,9 @@ function initialize() {
     const {wafer, revision} = current();
     if (!selected) throw new Error('请选择要复核的格点');
     const values = new FormData(event.target);
-    await request(waferPath(wafer.id, '/holds'), {expected: revision, id: values.get('id'), reason: values.get('reason'), site: selected});
+    const body = {expected: revision, id: values.get('id'), reason: values.get('reason'), site: selected};
+    if (wafer.conditions) body.condition = values.get('condition');
+    await request(waferPath(wafer.id, '/holds'), body);
     await open();
     flash('已登记复核，等待新的探针批次');
   }));

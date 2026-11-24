@@ -7,6 +7,7 @@ from .validation import fields
 from .wafers import load_wafer
 
 FORMAT = 'diegrade.release.1'
+DUAL_FORMAT = 'diegrade.release.2'
 
 
 def load_release(conn, wafer_id, revision):
@@ -27,7 +28,8 @@ def seal(conn, wafer_id, data):
             raise
     evidence = events.read(conn, wafer_id)
     rows = assignments(replay_timeline(spec, evidence))
-    body = {'format': FORMAT, 'revision': revision, 'wafer': spec, 'events': evidence, 'rows': rows}
+    body = {'format': DUAL_FORMAT if 'conditions' in spec else FORMAT,
+            'revision': revision, 'wafer': spec, 'events': evidence, 'rows': rows}
     release = {'payload': body, 'sha256': digest(body)}
     conn.execute('INSERT INTO releases VALUES (?, ?, ?)', (wafer_id, revision, encode(release)))
     return release
@@ -35,7 +37,7 @@ def seal(conn, wafer_id, data):
 
 def verify(release):
     body = release['payload']
-    if body['format'] != FORMAT or digest(body) != release['sha256']:
+    if body['format'] not in (FORMAT, DUAL_FORMAT) or digest(body) != release['sha256']:
         raise DomainError('release_digest', '分选版结构或摘要不一致', 409)
     computed = assignments(replay_timeline(body['wafer'], body['events']))
     if computed != body['rows']:

@@ -28,7 +28,10 @@ export function renderMap(data, selected, onPick) {
     const rect = svgNode('rect', {x: x - .42, y: -y - .42, width: .84, height: .84, rx: .08,
       class: `die ${cell.state}${active ? ' selected' : ''}`});
     const title = svgNode('title', {});
-    title.textContent = `(${x}, ${y}) · ${labels[cell.state]}`;
+    const detail = cell.conditions
+      ? ` · ${Object.entries(cell.conditions).map(([name, part]) => `${name} ${labels[part.state]}`).join(' / ')}`
+      : '';
+    title.textContent = `(${x}, ${y}) · ${labels[cell.state]}${detail}`;
     rect.append(title);
     rect.addEventListener('click', () => onPick(cell.site));
     svg.append(rect);

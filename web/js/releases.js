@@ -33,6 +33,12 @@ export function renderReleases(data, action) {
 
 export function clearComparison() { byId('comparison').replaceChildren(); }
 
+function provenance(value) {
+  return value && typeof value === 'object'
+    ? Object.entries(value).map(([name, batch]) => `${name}:${batch}`).join(' ')
+    : value;
+}
+
 export function bindReleases(action, current, reload) {
   byId('seal').addEventListener('click', action(async () => {
     const {wafer, revision} = current();
@@ -49,7 +55,7 @@ export function bindReleases(action, current, reload) {
     const area = byId('comparison');
     if (!result.changes.length) area.append(node('p', '分档和来源均无变化'));
     else area.append(table(['格点', '旧档', '新档', '原来源', '新来源', '变化'], result.changes.map(c => [
-      c.site.join(', '), labels[c.before], labels[c.after], c.from_batch, c.to_batch, c.kind === 'grade' ? '改档' : '仅来源',
+      c.site.join(', '), labels[c.before], labels[c.after], provenance(c.from_batch), provenance(c.to_batch), c.kind === 'grade' ? '改档' : '仅来源',
     ])));
   }));
 }
