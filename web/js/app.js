@@ -1,6 +1,7 @@
 import {request, waferPath} from './api.js';
 import {bindBatch, clearPreview} from './batch-form.js';
 import {bindCatalog, loadRules} from './catalog.js';
+import {bindConsign, clearConsignPreview, renderConsignments} from './consign.js';
 import {byId, options} from './dom.js';
 import {bindTabs} from './navigation.js';
 import {bindReleases, clearComparison, renderReleases} from './releases.js';
@@ -46,6 +47,7 @@ function render(data) {
   renderMap(data, selected, pick);
   renderTrace(null);
   renderReleases(data, action);
+  renderConsignments(data);
   byId('flag-focus').disabled = !data?.cells.some(c => c.state === 'missing' || c.state === 'review');
 }
 
@@ -61,6 +63,7 @@ async function open(id = byId('wafer').value) {
   options(byId('wafer'), wafers.map(item => [item.id, item.id]), choice);
   clearComparison();
   clearPreview();
+  clearConsignPreview();
   render(data);
   if (selected) await pick(selected);
 }
@@ -69,6 +72,7 @@ function initialize() {
   bindTabs();
   bindBatch(action, current, open);
   bindCatalog(action, open);
+  bindConsign(action, current, open);
   bindReleases(action, current, open);
   byId('reload').addEventListener('click', action(() => open()));
   byId('wafer').addEventListener('change', action(event => open(event.target.value)));

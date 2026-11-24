@@ -4,7 +4,7 @@
 
 ## 对象与所有权
 
-规则按名称和版本冻结；登记晶圆时固定物理掩模、保留点与规则正文。每个晶圆有连续增加的现场代次，包含首测或复测批次和逐点复核事件。有效测量引用具体的源批次与设备坐标；一份封存分选版捕获某代完整输入与计划。
+规则按名称和版本冻结；登记晶圆时固定物理掩模、保留点与规则正文。每个晶圆有连续增加的现场代次，包含首测或复测批次、分行接纳的复测来件、返工更正和逐点复核事件。有效测量引用具体的源批次与设备坐标；一份封存分选版捕获某代完整输入与计划。
 
 `geometry` 定义物理掩模，`frames` 定义设备坐标变换。边缘判定用四邻域；保留点仍算物理邻居。`probe_csv` 解析输入，`batches` 校验批次投影，`grading` 只负责分档规则，`timeline` 用时间上的现场代次约束事件并重建逐点事实。`database`、`events` 提供读一致性与原子追加；`intake` 协调预检和入库。`sorter`、`archives`、`comparison` 分别处理交付行、封存复算和版差。`routes`、`httpd`、`web` 负责传输与操作，不自行重算档位。
 
@@ -16,6 +16,8 @@
 4. 复测只覆盖当前待复测点，逐行引用最新测量的批次号。已经判档的点只可凭有编号及事由的复核事件重新开启复测。不会丢弃旧事实。
 5. 变更请求使用 `expected` 现场代次。预检运行同套校验但不持久化。实写在 SQLite 写事务内重新验证；任意行违规均不推进代次。在当前代次下重发同一规范内容返回幂等结果，换内容不允许复用编号。
 6. 未测或待复测均阻止签出。已签出版保留原样，下载前校验摘要并重算。两版比较按物理格点关联，区分档位变化和同档的来源变化。
+7. 复测来件可行走分行接纳通道：保留来件编号、原始行号与每行处置。整表无法辨识原始行时整件拒绝；能辨识但无法定位的行单独隔离；同一来件两条及以上可定位行落到同一物理格点时，该点全部原行隔离，即使其中一条引用了正确的父批次。无竞争行须落在可测格点并引用当前待复测父批次，全部合规行一次生效；隔离行不解除阻签。普通批次通道仍整件通过或整件拒绝。
+8. 返工更正引用原来件编号，逐行注明撤销或更正，已接纳行不得改写。更正行按当时现场校验格点与父批次（沿用原来件坐标系），全部处置合法才一次生效。来件与更正原样重送幂等不重复量测，同编号改内容须拒绝。证据包保留来件原文，接收方按各次提交当时的现场从原来件复算每行处置与最终分选来源；只存筛后合法行或只附处置结论都不能通过核验。
 
 ## 本机 HTTP 接口
 
@@ -29,9 +31,12 @@
 | GET | `/wafers/{id}/cells/{x}/{y}` | 格点证据与判档阈值 |
 | POST | `/wafers/{id}/preview` | 批次试算，不写入 |
 | POST | `/wafers/{id}/batches` | 原子写入批次 |
+| POST | `/wafers/{id}/consignments/preview` | 来件分行预检，不写入 |
+| POST | `/wafers/{id}/consignments` | 分行接纳复测来件 |
+| POST | `/wafers/{id}/reworks` | 引用原来件逐行撤销或更正 |
 | POST | `/wafers/{id}/holds` | 逐点复核并重新开放复测 |
 | POST | `/wafers/{id}/releases` | 固定一代分选版 |
 | GET | `/wafers/{id}/releases/{rev}/{replay,manifest,sorter}` | 复算、下载证据包或分选表 |
 | GET | `/wafers/{id}/compare/{old}/{new}` | 同片版差 |
 
-批次正文为 `{expected,batch:{id,kind,frame:{offset,turn,mirror},csv}}`；复核正文为 `{expected,id,site,reason}`；签出正文为 `{expected}`。规则与晶圆输入见 `examples/sample.json`。独立测试套件暂缓；`tools.smoke` 对真实入口执行临时 HTTP 工作流。
+批次正文为 `{expected,batch:{id,kind,frame:{offset,turn,mirror},csv}}`；复核正文为 `{expected,id,site,reason}`；签出正文为 `{expected}`。来件正文为 `{expected,consignment:{id,frame,csv}}`，逐行处置随响应返回；更正正文为 `{expected,rework:{id,source,lines:[{line,action,record?}]}}`，`action` 为 `revoke` 或 `correct`，更正记录字段与探针行一致。规则与晶圆输入见 `examples/sample.json`。独立测试套件暂缓；`tools.smoke` 对真实入口执行临时 HTTP 工作流。

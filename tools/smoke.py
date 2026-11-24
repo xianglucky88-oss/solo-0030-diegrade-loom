@@ -46,6 +46,16 @@ class Station:
             'id': ID, 'kind': kind, 'frame': frame or {'offset': [0, 0], 'turn': 0, 'mirror': False}, 'csv': HEADER + records}}
         return self.wafer('/preview' if dry else '/batches', body, error)
 
+    def consign(self, ID, csv, dry=False, error=None, expected=None):
+        body = {'expected': self.rev if expected is None else expected, 'consignment': {
+            'id': ID, 'frame': {'offset': [0, 0], 'turn': 0, 'mirror': False}, 'csv': csv}}
+        return self.wafer('/consignments/preview' if dry else '/consignments', body, error)
+
+    def rework(self, ID, source, lines, error=None, expected=None):
+        body = {'expected': self.rev if expected is None else expected,
+                'rework': {'id': ID, 'source': source, 'lines': lines}}
+        return self.wafer('/reworks', body, error)
+
 
 def rules(s):
     s.rule = json.loads((DEMO / 'sample.json').read_bytes())['rule']
@@ -147,6 +157,7 @@ def hold(s):
 
 def compare(s):
     s.batch('C01', '0,0,ok,91,55,A01\n', 'repeat')
+    s.rev = 4
     s.wafer('/releases', {'expected': 4})
     changes = s.wafer('/compare/2/4')['changes']
     assert changes == [{'site': [0, 0], 'before': 'a', 'after': 'b', 'kind': 'grade', 'from_batch': 'A01', 'to_batch': 'C01'}]
@@ -154,12 +165,95 @@ def compare(s):
     assert s.wafer('/releases/2/sorter') == s.old_bytes
 
 
-STEPS = (rules, wafer, preview, ingest, grid, trace, seal, replay, export, hold, compare)
+def consign(s):
+    # 复核重开 P=(0,-1) 与 Q=(-1,-1)，二者当前待复测父批次都是 A01（即 S）
+    for site, tag in (([0, -1], 'H02'), ([-1, -1], 'H03')):
+        s.wafer('/holds', {'expected': s.rev, 'site': site, 'id': tag, 'reason': '复测前复核'})
+        s.rev += 1
+    # 来件 R01：行 2 落 P 且引用 A01；行 3、4 同落 Q，行 4 引用错父批次
+    s.r01 = HEADER + '0,-1,ok,80,55,A01\n-1,-1,ok,80,60,A01\n-1,-1,ok,80,61,WRONG\n'
+    out = s.consign('R01', s.r01, dry=True)
+    assert [c['line'] for c in out['accepted']] == [2]
+    assert [c['line'] for c in out['quarantined']] == [3, 4]
+    assert out['revision'] == s.rev and s.wafer()['revision'] == s.rev  # 预检不落库
+    # 无法定位的行单独隔离，其余行照常接纳
+    out = s.consign('RX', HEADER + '0,-1,ok,80,55,A01\n9,9,ok,80,55,A01\n', dry=True)
+    assert [c['line'] for c in out['accepted']] == [2] and [c['line'] for c in out['quarantined']] == [3]
+    # 整张表无法辨识原始行时整件拒绝
+    s.consign('RBAD', 'not,a,valid,header\n1,2,3,4,5,6\n', dry=True, error=(422, 'csv_header'))
+    # 正式送交：只让 P 生效
+    out = s.consign('R01', s.r01)
+    assert out['revision'] == s.rev + 1 and [c['line'] for c in out['accepted']] == [2]
+    s.rev += 1
+    cell = s.wafer('/cells/0/-1')
+    assert cell['state'] == 'b' and cell['chain'][-1]['batch'] == 'R01' and cell['chain'][-1]['line'] == 2
+    # Q 仍待复测：隔离行不能解除阻签
+    assert s.wafer()['counts'].get('review', 0) == 1
+    s.wafer('/releases', {'expected': s.rev}, (409, 'not_ready'))
+    # 原样重送不重复量测；同编号改内容须拒绝
+    assert s.consign('R01', s.r01)['duplicate'] and s.wafer()['revision'] == s.rev
+    s.consign('R01', HEADER + '0,-1,ok,80,56,A01\n', error=(409, 'consignment_conflict'))
+
+
+def rework(s):
+    # 另一来件 R02 合法补测 Q
+    out = s.consign('R02', HEADER + '-1,-1,ok,80,60,A01\n')
+    assert [c['line'] for c in out['accepted']] == [2] and out['revision'] == s.rev + 1
+    s.rev += 1
+    assert s.wafer()['counts'].get('review', 0) == 0
+    # 复核重开 Q：当前待复测父批次变为 R02
+    s.wafer('/holds', {'expected': s.rev, 'site': [-1, -1], 'id': 'H04', 'reason': '复核重开'})
+    s.rev += 1
+    # 撤销行 4；行 3 仍隔离，不会自动生效
+    out = s.rework('W01', 'R01', [{'line': 4, 'action': 'revoke'}])
+    assert out['revoked'] == [4] and out['revision'] == s.rev + 1
+    s.rev += 1
+    assert s.wafer()['counts'].get('review', 0) == 1
+    # 已接纳的 P 行不得随之改写
+    s.rework('WX', 'R01', [{'line': 2, 'action': 'revoke'}], error=(409, 'line_closed'))
+    # 撤销行 4 后行 3 也不能继续用 S（A01）：当前父批次已是 R02
+    record = {'x': -1, 'y': -1, 'contact': 'ok', 'leak_na': 80, 'margin_mv': 65, 'parent': 'A01'}
+    s.rework('W02', 'R01', [{'line': 3, 'action': 'correct', 'record': record}], error=(409, 'repeat_parent'))
+    # 须提交以 R02 为父的更正才能补测
+    record['parent'] = 'R02'
+    out = s.rework('W02', 'R01', [{'line': 3, 'action': 'correct', 'record': record}])
+    assert out['corrected'] == [{'line': 3, 'site': [-1, -1], 'state': 'b'}] and out['revision'] == s.rev + 1
+    s.rev += 1
+    # 已生效的更正原样重送幂等；同号改内容拒绝；已处置行不可再处置；找不到原来件
+    assert s.rework('W02', 'R01', [{'line': 3, 'action': 'correct', 'record': record}])['duplicate']
+    s.rework('W02', 'R01', [{'line': 3, 'action': 'revoke'}], error=(409, 'rework_conflict'))
+    s.rework('W03', 'R01', [{'line': 3, 'action': 'revoke'}], error=(409, 'line_closed'))
+    s.rework('W04', 'NOPE', [{'line': 2, 'action': 'revoke'}], error=(404, 'source_missing'))
+
+
+def consign_seal(s):
+    assert s.wafer()['ready']
+    s.wafer('/releases', {'expected': s.rev})
+    result = s.wafer(f'/releases/{s.rev}/replay')
+    assert result['verified'] and result['rows'] == 8
+    # 证据包保留来件原文与更正，接收方可按各次提交当时的现场从原来件复算
+    manifest = json.loads(s.wafer(f'/releases/{s.rev}/manifest'))
+    events = {e['body']['id']: e for e in manifest['payload']['events'] if e['kind'] in ('consignment', 'rework')}
+    assert '0,-1,ok,80,55,A01' in events['R01']['body']['csv'] and 'WRONG' in events['R01']['body']['csv']
+    assert events['W02']['body']['lines'][0]['record']['parent'] == 'R02'
+    # 核实最终分选由哪些行产生：P ← 来件 R01 第 2 行，Q ← 更正 W02
+    rows = {(r['x'], r['y']): r for r in csv.DictReader(io.StringIO(s.wafer(f'/releases/{s.rev}/sorter').decode()))}
+    assert rows[('0', '-1')]['batch'] == 'R01' and rows[('-1', '-1')]['batch'] == 'W02'
+    # 来件处置一览：行 2 接纳、行 3 已更正、行 4 已撤销
+    listing = {c['id']: c for c in s.wafer()['consignments']}
+    status = {row['line']: row['status'] for row in listing['R01']['lines']}
+    assert status == {2: 'accepted', 3: 'corrected', 4: 'revoked'}
+    # 旧通道的签件照常下载和复算
+    assert s.wafer('/releases/2/sorter') == s.old_bytes
+    assert s.wafer('/releases/2/replay')['verified']
+
+
+STEPS = (rules, wafer, preview, ingest, grid, trace, seal, replay, export, hold, compare, consign, rework, consign_seal)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--through', choices=[flow.__name__ for flow in STEPS], default='compare')
+    parser.add_argument('--through', choices=[flow.__name__ for flow in STEPS], default='consign_seal')
     args = parser.parse_args()
     with TemporaryDirectory(prefix='diegrade-smoke-') as temp, make_server(Database(Path(temp) / 'db'), 0) as server:
         worker = Thread(target=server.serve_forever, daemon=True)

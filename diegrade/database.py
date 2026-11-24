@@ -2,7 +2,7 @@ from contextlib import contextmanager
 from pathlib import Path
 import sqlite3
 
-from .schema import SQL, VERSION
+from .schema import MIGRATIONS, SQL, VERSION
 
 
 class Database:
@@ -15,6 +15,11 @@ class Database:
                 for statement in SQL.split(';'):
                     if statement.strip():
                         conn.execute(statement)
+            elif version < VERSION:
+                for step in range(version, VERSION):
+                    for statement in MIGRATIONS[step].split(';'):
+                        if statement.strip():
+                            conn.execute(statement)
             elif version != VERSION:
                 raise RuntimeError(f'不支持数据库结构版本 {version}')
 

@@ -40,6 +40,7 @@
     <section class="operations" id="operations" aria-label="现场操作">
       <div role="tablist" class="tabs" aria-label="操作类型" id="tabs">
         <button type="button" id="tab-batch" data-panel="batch" role="tab" aria-selected="true" aria-controls="batch">批次预检与导入</button>
+        <button type="button" id="tab-consign" data-panel="consign" role="tab" aria-selected="false" aria-controls="consign" tabindex="-1">分行送交</button>
         <button type="button" id="tab-hold" data-panel="hold" role="tab" aria-selected="false" aria-controls="hold" tabindex="-1">复核登记</button>
         <button type="button" id="tab-release" data-panel="release" role="tab" aria-selected="false" aria-controls="release" tabindex="-1">分选交付</button>
         <button type="button" id="tab-catalog" data-panel="catalog" role="tab" aria-selected="false" aria-controls="catalog" tabindex="-1">规则与晶圆</button>
@@ -59,6 +60,32 @@
           <div class="row"><button name="mode" value="preview">预检批次</button><button class="primary" name="mode" value="batches">导入批次</button></div>
           <div id="preview" class="output"></div>
         </form>
+      </section>
+      <section id="consign" role="tabpanel" aria-labelledby="tab-consign" hidden>
+        <form id="consign-form">
+          <h2>复测来件（分行接纳）</h2>
+          <div class="row">
+            <label>来件编号 <input name="id" required maxlength="40" autocomplete="off"></label>
+            <label>逆时针旋转 <select name="turn"><option value="0">0°</option><option value="1">90°</option><option value="2">180°</option><option value="3">270°</option></select></label>
+            <label>横向平移 <input type="number" name="dx" value="0" min="-2048" max="2048" required></label>
+            <label>纵向平移 <input type="number" name="dy" value="0" min="-2048" max="2048" required></label>
+            <label class="check"><input type="checkbox" name="mirror"> 横轴镜像</label>
+          </div>
+          <label>来件内容 <textarea name="csv" rows="4" required spellcheck="false" placeholder="x,y,contact,leak_na,margin_mv,parent"></textarea></label>
+          <div class="row"><button name="mode" value="preview">预检来件</button><button class="primary" name="mode" value="send">送交来件</button></div>
+          <div id="consign-result" class="output"></div>
+        </form>
+        <form id="rework-form">
+          <h2>返工更正</h2>
+          <div class="row">
+            <label>更正编号 <input name="id" required maxlength="40" autocomplete="off"></label>
+            <label>原来件 <select name="source" required></select></label>
+          </div>
+          <label>行处置（每行一条：<code>行号,revoke</code> 或 <code>行号,correct,x,y,contact,leak_na,margin_mv,parent</code>）
+            <textarea name="lines" rows="3" required spellcheck="false" placeholder="3,correct,-1,-1,ok,80,65,R02&#10;4,revoke"></textarea></label>
+          <button class="primary">提交更正</button>
+        </form>
+        <div id="consignments"></div>
       </section>
       <section id="hold" role="tabpanel" aria-labelledby="tab-hold" hidden>
         <form id="hold-form">

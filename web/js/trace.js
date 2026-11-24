@@ -20,7 +20,9 @@ export function renderTrace(cell) {
   const list = node('ol', undefined, 'chain');
   for (const event of cell.chain) {
     const entry = node('li');
-    entry.append(node('strong', event.event === 'hold' ? `第 ${event.revision} 代 · 复核` : `${event.batch} · ${labels[event.state]}`));
+    const origin = event.line !== undefined ? ` · 第 ${event.line} 行` : '';
+    const via = event.source ? `（原 ${event.source}）` : '';
+    entry.append(node('strong', event.event === 'hold' ? `第 ${event.revision} 代 · 复核` : `${event.batch}${via}${origin} · ${labels[event.state]}`));
     entry.append(node('span', event.why));
     if (event.record) {
       const row = event.record;

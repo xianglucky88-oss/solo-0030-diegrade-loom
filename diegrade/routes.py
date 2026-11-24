@@ -55,6 +55,21 @@ def submit(conn, body, wafer):
     return intake.intake(conn, wafer, body, write=True)
 
 
+@route('POST', r'/wafers/([^/]+)/consignments/preview')
+def consignment_preview(conn, body, wafer):
+    return intake.consignment(conn, wafer, body, write=False)
+
+
+@route('POST', r'/wafers/([^/]+)/consignments', write=True)
+def consignment_submit(conn, body, wafer):
+    return intake.consignment(conn, wafer, body, write=True)
+
+
+@route('POST', r'/wafers/([^/]+)/reworks', write=True)
+def rework_submit(conn, body, wafer):
+    return intake.rework(conn, wafer, body)
+
+
 @route('POST', r'/wafers/([^/]+)/holds', write=True)
 def hold(conn, body, wafer):
     return intake.hold(conn, wafer, body)
