@@ -41,6 +41,7 @@
       <div role="tablist" class="tabs" aria-label="操作类型" id="tabs">
         <button type="button" id="tab-batch" data-panel="batch" role="tab" aria-selected="true" aria-controls="batch">批次预检与导入</button>
         <button type="button" id="tab-hold" data-panel="hold" role="tab" aria-selected="false" aria-controls="hold" tabindex="-1">复核登记</button>
+        <button type="button" id="tab-correct" data-panel="correct" role="tab" aria-selected="false" aria-controls="correct" tabindex="-1">位姿更正</button>
         <button type="button" id="tab-release" data-panel="release" role="tab" aria-selected="false" aria-controls="release" tabindex="-1">分选交付</button>
         <button type="button" id="tab-catalog" data-panel="catalog" role="tab" aria-selected="false" aria-controls="catalog" tabindex="-1">规则与晶圆</button>
       </div>
@@ -66,6 +67,23 @@
           <p id="hold-site">尚未选中格点</p>
           <div class="row"><label>复核编号 <input name="id" required maxlength="40"></label><label class="wide">复核事由 <input name="reason" required maxlength="240"></label></div>
           <button class="primary">登记复核</button>
+        </form>
+      </section>
+      <section id="correct" role="tabpanel" aria-labelledby="tab-correct" hidden>
+        <form id="correct-form">
+          <h2>更正首测设备位姿</h2>
+          <p class="hint">保留原始量测与旧签件；只可在该批次已占的物理点集合内一一重排，落到保留点、掩模外或改变集合将整次拒绝。</p>
+          <div class="row">
+            <label>更正编号 <input name="id" required maxlength="40" autocomplete="off"></label>
+            <label>首测批次 <input name="batch" required maxlength="40" autocomplete="off"></label>
+            <label>逆时针旋转 <select name="turn"><option value="0">0°</option><option value="1">90°</option><option value="2">180°</option><option value="3">270°</option></select></label>
+            <label>横向平移 <input type="number" name="dx" value="0" min="-2048" max="2048" required></label>
+            <label>纵向平移 <input type="number" name="dy" value="0" min="-2048" max="2048" required></label>
+            <label class="check"><input type="checkbox" name="mirror"> 横轴镜像</label>
+          </div>
+          <label>更正事由 <input name="reason" required maxlength="240"></label>
+          <div class="row"><button class="primary">登记更正</button></div>
+          <div id="correction-output" class="output"></div>
         </form>
       </section>
       <section id="release" role="tabpanel" aria-labelledby="tab-release" hidden>

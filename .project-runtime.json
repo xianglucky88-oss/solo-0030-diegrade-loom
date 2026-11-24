@@ -15,6 +15,7 @@
     {"workflow_id":"replay","command":"python3 -B -m tools.smoke --through replay"},
     {"workflow_id":"export","command":"python3 -B -m tools.smoke --through export"},
     {"workflow_id":"hold","command":"python3 -B -m tools.smoke --through hold"},
+    {"workflow_id":"correct","command":"python3 -B -m tools.smoke --through correct"},
     {"workflow_id":"compare","command":"python3 -B -m tools.smoke --through compare"}
   ]
 }

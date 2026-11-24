@@ -60,6 +60,11 @@ def hold(conn, body, wafer):
     return intake.hold(conn, wafer, body)
 
 
+@route('POST', r'/wafers/([^/]+)/corrections', write=True)
+def correction(conn, body, wafer):
+    return intake.correction(conn, wafer, body)
+
+
 @route('POST', r'/wafers/([^/]+)/releases', write=True)
 def seal(conn, body, wafer):
     result = archives.seal(conn, wafer, body)

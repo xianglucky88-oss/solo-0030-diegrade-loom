@@ -1,6 +1,7 @@
 from . import events
 from .batches import prepare
 from .errors import DomainError
+from .frames import frame
 from .geometry import point
 from .timeline import replay_timeline
 from .validation import fields, identifier, reason
@@ -30,6 +31,28 @@ def intake(conn, wafer_id, data, write):
         events.append(conn, wafer_id, revision + 1, 'batch', batch['id'], batch)
     return {'revision': revision + int(write), 'duplicate': False,
             'changes': [{'site': list(site), 'state': result['state']} for site, result in changes]}
+
+
+def correction(conn, wafer_id, data):
+    fields(data, 'expected', 'id', 'batch', 'frame', 'reason')
+    correction_id = identifier(data['id'])
+    body = {'id': correction_id, 'batch': identifier(data['batch']),
+            'frame': frame(data['frame']), 'reason': reason(data['reason'])}
+    spec, revision = load_wafer(conn, wafer_id)
+    events.check_revision(data['expected'], revision)
+    old = events.find(conn, wafer_id, 'correction', correction_id)
+    if old is not None:
+        if old != body:
+            raise DomainError('correction_conflict', '更正编号已用于另一份证据', 409)
+        return {'revision': revision, 'duplicate': True, 'changes': []}
+    if revision == events.LIMIT:
+        raise DomainError('limit', '本片现场记录已达上限', 409)
+    timeline = replay_timeline(spec, events.read(conn, wafer_id))
+    changes = timeline.apply_correction(body, revision + 1)
+    events.append(conn, wafer_id, revision + 1, 'correction', correction_id, body)
+    return {'revision': revision + 1, 'duplicate': False,
+            'changes': [{'site': list(site), 'state': result['state'],
+                         'reopened': bool(result.get('reopened'))} for site, result in changes]}
 
 
 def hold(conn, wafer_id, data):

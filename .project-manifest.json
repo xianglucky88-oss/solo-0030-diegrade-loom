@@ -13,7 +13,7 @@
     {"id":"sorter","paths":["diegrade/sorter.py","diegrade/comparison.py"],"responsibility":"构造分选计划并解释版本变化"},
     {"id":"web","paths":["web/index.html","web/js/app.js"],"responsibility":"承载操作者的浏览、导入和交付动作"}
   ],
-  "complexity":{"mechanisms":["规则正文冻结","整数镜像旋转平移","物理邻域判档","现场代次防并发覆盖","规范批次幂等","整批原子接收","逐颗复测父链","复核重新开放","自包含证据复算","稳定的分选行与来源对账"]},
+  "complexity":{"mechanisms":["规则正文冻结","整数镜像旋转平移","物理邻域判档","现场代次防并发覆盖","规范批次幂等","整批原子接收","首测位姿更正与集合内重排","逐颗复测父链","复核重新开放","自包含证据复算","稳定的分选行与来源对账"]},
   "workflows":[
     {"id":"rules","name":"登记规则版本","entry":"POST /rules","steps":["校验阈值顺序","按名称和版本冻结"],"module_ids":["http","storage","rules"],"success":"同版同内容幂等","failure":"已登记版本不可改写","verification":"python3 -B -m tools.smoke --through rules"},
     {"id":"wafer","name":"登记晶圆形状","entry":"POST /wafers","steps":["校验物理行段和保留点","冻结选定规则"],"module_ids":["http","storage","rules","geometry"],"success":"规则后来升级不影响该片","failure":"重叠行段拒绝","verification":"python3 -B -m tools.smoke --through wafer"},
@@ -25,6 +25,7 @@
     {"id":"replay","name":"回放封存输入","entry":"GET .../releases/{rev}/replay","steps":["校验封存摘要","以原规则重算分选行"],"module_ids":["http","archive","timeline","sorter"],"success":"返回复算一致与行数","failure":"不存在的分选版不可回放","verification":"python3 -B -m tools.smoke --through replay"},
     {"id":"export","name":"下载分选表","entry":"GET .../releases/{rev}/sorter","steps":["验证分选版","序列化稳定 CSV"],"module_ids":["http","archive","sorter"],"success":"顺序固定且不含保留点","failure":"工作态不能直接导出","verification":"python3 -B -m tools.smoke --through export"},
     {"id":"hold","name":"重新开放逐颗复测","entry":"POST /wafers/{id}/holds","steps":["核实当前格点已有终档","追加复核并阻止新版签出"],"module_ids":["http","intake","storage","timeline"],"success":"旧版不变，现场待复测","failure":"保留点不能复核","verification":"python3 -B -m tools.smoke --through hold"},
+    {"id":"correct","name":"更正首测设备位姿","entry":"POST /wafers/{id}/corrections","steps":["在已占物理点集合内一一重排原行","保留原始量测与旧签件","依赖失效的复测链归档并重开待复测"],"module_ids":["http","intake","frames","timeline","storage"],"success":"原归属未变的证据保持原状","failure":"落到保留点、掩模外或改变集合整次拒绝","verification":"python3 -B -m tools.smoke --through correct"},
     {"id":"compare","name":"比较同片两版","entry":"GET .../compare/{old}/{new}","steps":["复算确认两个封存件","按物理坐标标记变档和来源变化"],"module_ids":["http","archive","sorter","timeline"],"success":"返回真正发生变化的点及来源","failure":"倒序版本拒绝","verification":"python3 -B -m tools.smoke --through compare"}
   ]
 }

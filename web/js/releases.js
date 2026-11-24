@@ -48,8 +48,10 @@ export function bindReleases(action, current, reload) {
     if (current().wafer.id !== wafer.id) return;
     const area = byId('comparison');
     if (!result.changes.length) area.append(node('p', '分档和来源均无变化'));
-    else area.append(table(['格点', '旧档', '新档', '原来源', '新来源', '变化'], result.changes.map(c => [
-      c.site.join(', '), labels[c.before], labels[c.after], c.from_batch, c.to_batch, c.kind === 'grade' ? '改档' : '仅来源',
-    ])));
+    else area.append(table(['格点', '旧档', '新档', '原来源', '新来源', '旧设备坐标', '新设备坐标', '变化'], result.changes.map(c => {
+      const device = coords => Array.isArray(coords) && coords[0] !== null ? `(${coords.join(', ')})` : '—';
+      return [c.site.join(', '), labels[c.before], labels[c.after], c.from_batch, c.to_batch,
+        device(c.from_device), device(c.to_device), c.kind === 'grade' ? '改档' : '同档来源变化'];
+    })));
   }));
 }

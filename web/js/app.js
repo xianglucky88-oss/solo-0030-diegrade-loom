@@ -1,6 +1,7 @@
 import {request, waferPath} from './api.js';
 import {bindBatch, clearPreview} from './batch-form.js';
 import {bindCatalog, loadRules} from './catalog.js';
+import {bindCorrections} from './corrections.js';
 import {byId, options} from './dom.js';
 import {bindTabs} from './navigation.js';
 import {bindReleases, clearComparison, renderReleases} from './releases.js';
@@ -69,6 +70,7 @@ function initialize() {
   bindTabs();
   bindBatch(action, current, open);
   bindCatalog(action, open);
+  bindCorrections(action, current, open);
   bindReleases(action, current, open);
   byId('reload').addEventListener('click', action(() => open()));
   byId('wafer').addEventListener('change', action(event => open(event.target.value)));
