@@ -2,7 +2,7 @@ from contextlib import contextmanager
 from pathlib import Path
 import sqlite3
 
-from .schema import SQL, VERSION
+from .schema import MIGRATION_2, SQL, VERSION
 
 
 class Database:
@@ -12,11 +12,16 @@ class Database:
         with self.transaction(write=True) as conn:
             version, = conn.execute('PRAGMA user_version').fetchone()
             if version == 0:
-                for statement in SQL.split(';'):
-                    if statement.strip():
-                        conn.execute(statement)
+                statements = SQL
+            elif version == 1:
+                statements = MIGRATION_2
             elif version != VERSION:
                 raise RuntimeError(f'不支持数据库结构版本 {version}')
+            else:
+                statements = ''
+            for statement in statements.split(';'):
+                if statement.strip():
+                    conn.execute(statement)
 
     @contextmanager
     def transaction(self, write=False):

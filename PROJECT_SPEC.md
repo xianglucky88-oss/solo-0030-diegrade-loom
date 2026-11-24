@@ -16,6 +16,7 @@
 4. 复测只覆盖当前待复测点，逐行引用最新测量的批次号。已经判档的点只可凭有编号及事由的复核事件重新开启复测。不会丢弃旧事实。
 5. 变更请求使用 `expected` 现场代次。预检运行同套校验但不持久化。实写在 SQLite 写事务内重新验证；任意行违规均不推进代次。在当前代次下重发同一规范内容返回幂等结果，换内容不允许复用编号。
 6. 未测或待复测均阻止签出。已签出版保留原样，下载前校验摘要并重算。两版比较按物理格点关联，区分档位变化和同档的来源变化。
+7. 工位登记设备位姿、有序设备路线和单工单额度。派工把路线坐标归一为物理格点，只选择当前待复测且未被未结工单锁定的点；同一点只计一次，并先最大化开路点数、再最大化总待复测覆盖数。派工在 SQLite 写事务内写格点锁，保证同一物理点不会同时属于两张未结工单。普通批次遇到锁定点整批拒绝；只有所属工单可以整单回交。回件须来自指定工位、恰好覆盖锁定点，并逐行引用锁定父批次。成功回件与结单、释放锁在同一事务完成；已结工单的规范原件重放只返回首次结果，不新增量测、不改当前锁。
 
 ## 本机 HTTP 接口
 
@@ -24,7 +25,12 @@
 | 方法 | 路径 | 操作 |
 | --- | --- | --- |
 | GET / POST | `/rules` | 列表 / 冻结规则版本 |
+| GET / POST | `/stations` | 列表 / 登记探针工位、位姿、路线与额度 |
 | GET / POST | `/wafers` | 列表 / 登记晶圆 |
+| POST | `/wafers/{id}/stations` | 为指定晶圆上下文登记工位（等价工位登记） |
+| POST | `/wafers/{id}/dispatch` | 按工位最优路线创建并锁定工单 |
+| GET | `/wafers/{id}/work-orders` | 列出本晶圆工单 |
+| GET / POST | `/work-orders/{order}` | 工单详情 / 整单回交结单 |
 | GET | `/wafers/{id}` | 格点图、计数、可签状态 |
 | GET | `/wafers/{id}/cells/{x}/{y}` | 格点证据与判档阈值 |
 | POST | `/wafers/{id}/preview` | 批次试算，不写入 |
@@ -34,4 +40,4 @@
 | GET | `/wafers/{id}/releases/{rev}/{replay,manifest,sorter}` | 复算、下载证据包或分选表 |
 | GET | `/wafers/{id}/compare/{old}/{new}` | 同片版差 |
 
-批次正文为 `{expected,batch:{id,kind,frame:{offset,turn,mirror},csv}}`；复核正文为 `{expected,id,site,reason}`；签出正文为 `{expected}`。规则与晶圆输入见 `examples/sample.json`。独立测试套件暂缓；`tools.smoke` 对真实入口执行临时 HTTP 工作流。
+批次正文为 `{expected,batch:{id,kind,frame:{offset,turn,mirror},csv}}`；复核正文为 `{expected,id,site,reason}`；签出正文为 `{expected}`。工位正文至少为 `{id,frame,routes:[{id,points:[[设备x,设备y]]}],quota}`；派工正文为 `{station}`，回交可发到 `/work-orders/{id}/complete`，正文为 `{station,batch:{id,kind:'repeat',csv}}`（位姿取工单锁定值）。`/work_orders`、`/orders`、`/jobs` 及 `/receipt`、`/submit` 等路径/动作名提供兼容别名。规则与晶圆输入见 `examples/sample.json`。独立测试套件暂缓；`tools.smoke` 对真实入口执行临时 HTTP 工作流，`tools.dispatch_smoke` 执行双工位路线、锁、原子回交和结单重放场景。

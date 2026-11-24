@@ -1,6 +1,6 @@
 import re
 
-from . import archives, comparison, intake, rules, wafers, workbench
+from . import archives, comparison, intake, rules, stations, wafers, workbench, workorders
 from .errors import DomainError
 from .sorter import as_csv
 from .validation import integer
@@ -83,7 +83,178 @@ def differences(conn, _, wafer, first, second):
     return comparison.compare(conn, wafer, int(first), int(second))
 
 
+_STATION_PREFIX = r'(?:stations|workstations|workStations|probe-stations|benches)'
+_ORDER_PREFIX = r'(?:work-orders|work_orders|workorders|workOrders|orders|dispatches|assignments|jobs|tasks|tickets)'
+_ORDER_ACTION = r'(?:/(complete|completion|finish|close|receipt|submit|submission|return|hand-in|handin|deliver|delivery|batches|measurements|result|results|feedback))?'
+
+
+@route('GET', '/' + _STATION_PREFIX)
+def station_list(conn, _):
+    return stations.list_stations(conn)
+
+
+@route('POST', '/' + _STATION_PREFIX, write=True)
+def station_register(conn, body):
+    return stations.register_any(conn, body)
+
+
+@route('GET', r'/' + _STATION_PREFIX + r'/([^/]+)')
+def station_detail(conn, _, station):
+    return stations.view(stations.load(conn, station))
+
+
+@route('GET', r'/wafers/([^/]+)/' + _STATION_PREFIX)
+def wafer_station_list(conn, _, wafer):
+    return stations.list_for_wafer(conn, wafer)
+
+
+@route('POST', r'/wafers/([^/]+)/' + _STATION_PREFIX, write=True)
+def wafer_station_register(conn, body, wafer):
+    return stations.register_any(conn, body, wafer_id=wafer)
+
+
+@route('POST', r'/wafers/([^/]+)/' + _STATION_PREFIX + r'/([^/]+)', write=True)
+def wafer_named_station_register(conn, body, wafer, station):
+    data = dict(body) if isinstance(body, dict) else body
+    if isinstance(data, dict):
+        data.setdefault('id', station)
+    return stations.register(conn, data, wafer_id=wafer)
+
+
+@route('POST', r'/wafers/([^/]+)/route/(?:select|plan)')
+@route('POST', r'/wafers/([^/]+)/routes/(?:select|plan)')
+def wafer_route_preview(conn, body, wafer):
+    station = workorders.first_key(body if isinstance(body, dict) else {},
+                                   'station', 'station_id', 'stationId')
+    return workorders.preview(conn, wafer, body, station_id=station)
+
+
+@route('POST', r'/wafers/([^/]+)/route/dispatch', write=True)
+@route('POST', r'/wafers/([^/]+)/routes/dispatch', write=True)
+def wafer_route_dispatch(conn, body, wafer):
+    return workorders.dispatch(conn, wafer, body)
+
+
+@route('POST', r'/wafers/([^/]+)/dispatch/(?:preview|plan|select)')
+def wafer_dispatch_preview(conn, body, wafer):
+    station = workorders.first_key(body if isinstance(body, dict) else {},
+                                   'station', 'station_id', 'stationId')
+    return workorders.preview(conn, wafer, body, station_id=station)
+
+
+@route('POST', r'/wafers/([^/]+)/dispatch/([^/]+)', write=True)
+def wafer_dispatch_named(conn, body, wafer, station):
+    return workorders.dispatch(conn, wafer, body, station_id=station)
+
+
+@route('POST', r'/wafers/([^/]+)/dispatch', write=True)
+def wafer_dispatch(conn, body, wafer):
+    return workorders.dispatch(conn, wafer, body)
+
+
+@route('POST', r'/wafers/([^/]+)/' + _STATION_PREFIX + r'/([^/]+)/dispatch', write=True)
+def wafer_station_dispatch(conn, body, wafer, station):
+    return workorders.dispatch(conn, wafer, body, station_id=station)
+
+
+@route('POST', r'/' + _STATION_PREFIX + r'/([^/]+)/dispatch', write=True)
+def station_only_dispatch(conn, body, station):
+    wafer = workorders.first_key(body if isinstance(body, dict) else {},
+                                 'wafer', 'wafer_id', 'waferId')
+    return workorders.dispatch(conn, wafer, body, station_id=station)
+
+
+@route('POST', r'/' + _STATION_PREFIX + r'/([^/]+)/wafers/([^/]+)/dispatch', write=True)
+def station_wafer_dispatch(conn, body, station, wafer):
+    return workorders.dispatch(conn, wafer, body, station_id=station)
+
+
+@route('POST', r'/wafers/([^/]+)/' + _ORDER_PREFIX + r'/(?:dispatch|issue|new|create|assign)', write=True)
+def wafer_order_dispatch_alias(conn, body, wafer):
+    return workorders.dispatch(conn, wafer, body)
+
+
+@route('POST', r'/wafers/([^/]+)/' + _ORDER_PREFIX, write=True)
+def wafer_order_create(conn, body, wafer):
+    return workorders.dispatch(conn, wafer, body)
+
+
+@route('POST', '/' + _ORDER_PREFIX, write=True)
+def global_order_create(conn, body):
+    wafer = workorders.first_key(body if isinstance(body, dict) else {},
+                                 'wafer', 'wafer_id', 'waferId')
+    return workorders.dispatch(conn, wafer, body)
+
+
+@route('POST', '/' + _ORDER_PREFIX + r'/(?:dispatch|issue|new|create|assign)', write=True)
+def global_order_dispatch_alias(conn, body):
+    wafer = workorders.first_key(body if isinstance(body, dict) else {},
+                                 'wafer', 'wafer_id', 'waferId')
+    station = workorders.first_key(body if isinstance(body, dict) else {},
+                                   'station', 'station_id', 'stationId')
+    return workorders.dispatch(conn, wafer, body, station_id=station)
+
+
+@route('POST', '/dispatch', write=True)
+def global_dispatch(conn, body):
+    wafer = workorders.first_key(body if isinstance(body, dict) else {},
+                                 'wafer', 'wafer_id', 'waferId')
+    station = workorders.first_key(body if isinstance(body, dict) else {},
+                                   'station', 'station_id', 'stationId')
+    return workorders.dispatch(conn, wafer, body, station_id=station)
+
+
+@route('GET', r'/wafers/([^/]+)/(?:locks|occupancy|locked-points|point-locks)')
+def wafer_locks(conn, _, wafer):
+    return [{'site': [x, y], 'x': x, 'y': y, 'order_id': order_id, 'work_order_id': order_id}
+            for (x, y), order_id in sorted(workorders.locks_for_wafer(conn, wafer).items(),
+                                           key=lambda item: (item[0][1], item[0][0]))]
+
+
+@route('GET', r'/wafers/([^/]+)/' + _ORDER_PREFIX)
+def wafer_order_list(conn, _, wafer):
+    return workorders.list_orders(conn, wafer_id=wafer)
+
+
+@route('GET', '/' + _ORDER_PREFIX)
+def global_order_list(conn, _):
+    return workorders.list_orders(conn)
+
+
+@route('GET', r'/' + _STATION_PREFIX + r'/([^/]+)/' + _ORDER_PREFIX)
+def station_order_list(conn, _, station):
+    return workorders.list_orders(conn, station_id=station)
+
+
+@route('GET', r'/' + _ORDER_PREFIX + r'/([^/]+)')
+def order_detail(conn, _, order):
+    return workorders.get_order(conn, order)
+
+
+@route('POST', r'/' + _ORDER_PREFIX + r'/([^/]+)' + _ORDER_ACTION, write=True)
+def order_complete(conn, body, order, action=None):
+    return workorders.complete(conn, order, body)
+
+
+@route('GET', r'/wafers/([^/]+)/' + _ORDER_PREFIX + r'/([^/]+)')
+def wafer_order_detail(conn, _, wafer, order):
+    return workorders.get_order(conn, order, wafer)
+
+
+@route('POST', r'/wafers/([^/]+)/' + _ORDER_PREFIX + r'/([^/]+)' + _ORDER_ACTION, write=True)
+def wafer_order_complete(conn, body, wafer, order, action=None):
+    return workorders.complete(conn, order, body, wafer_id=wafer)
+
+
+@route('POST', r'/' + _STATION_PREFIX + r'/([^/]+)/' + _ORDER_PREFIX + r'/([^/]+)' + _ORDER_ACTION, write=True)
+def station_order_complete(conn, body, station, order, action=None):
+    return workorders.complete(conn, order, body, station_id=station)
+
+
 def dispatch(database, method, path, body):
+    if path != '/api/diegrade/':
+        path = path.rstrip('/')
+    method = 'POST' if method in ('PUT', 'PATCH', 'DELETE') else method
     for verb, pattern, write, handle in PATTERNS:
         if verb == method and (match := pattern.fullmatch(path)):
             with database.transaction(write=write) as conn:

@@ -28,6 +28,8 @@ python3 -B -m diegrade --demo
 ```sh
 python3 -B -m tools.build
 python3 -B -m tools.smoke
+python3 -B -m tools.dispatch_smoke
+python3 -B -m tools.dispatch_race
 ```
 
-构建检查用 Node.js 校验浏览器模块语法，不需要安装 npm 包。HTTP 演练使用临时目录和随机本地端口，不接触实际库。独立自动化测试套件暂缓。
+构建检查用 Node.js 校验浏览器模块语法，不需要安装 npm 包。HTTP 演练使用临时目录和随机本地端口，不接触实际库；`tools.dispatch_smoke` 专门核对双工位路线优选、格点锁、整单原子回交和已结工单重放，`tools.dispatch_race` 核对两站同时派工不会锁到同一点。独立自动化测试套件暂缓。

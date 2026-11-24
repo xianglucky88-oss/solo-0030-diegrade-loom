@@ -24,20 +24,34 @@ class WebHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         self.serve('POST')
 
+    def do_PUT(self):
+        self.serve('PUT')
+
+    def do_PATCH(self):
+        self.serve('PATCH')
+
+    def do_DELETE(self):
+        self.serve('DELETE')
+
     def serve(self, method):
         try:
             path = urlsplit(self.path).path
             if method == 'GET' and not path.startswith('/api/'):
                 return self.static(path)
-            body = self.read_json() if method == 'POST' else None
-            result = dispatch(self.server.database, method, path, body)
+            body = self.read_json() if method in ('POST', 'PUT', 'PATCH') else None
+            # The workbench's public contract is POST-based; accept REST-style
+            # update verbs as aliases for the same atomic actions.
+            route_method = 'POST' if method in ('PUT', 'PATCH', 'DELETE') else method
+            result = dispatch(self.server.database, route_method, path, body)
             if isinstance(result, tuple):
                 value, media, name = result
                 self.send_data(value if isinstance(value, str) else encode(value), media, attachment=name)
             else:
                 self.send_data(encode(result), 'application/json; charset=utf-8')
         except DomainError as exc:
-            self.send_data(encode({'error': exc.code, 'message': str(exc)}), 'application/json; charset=utf-8', exc.status)
+            payload = {'error': exc.code, 'code': exc.code, 'error_code': exc.code,
+                       'message': str(exc), 'status': exc.status}
+            self.send_data(encode(payload), 'application/json; charset=utf-8', exc.status)
         except sqlite3.OperationalError:
             logging.exception('存储操作失败')
             self.send_data('{"message":"存储暂不可用"}', 'application/json; charset=utf-8', 503)

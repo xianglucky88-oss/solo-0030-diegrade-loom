@@ -6,6 +6,7 @@
     {"id":"rules","paths":["diegrade/rules.py","diegrade/wafers.py"],"responsibility":"登记规则版本和冻结晶圆输入"},
     {"id":"geometry","paths":["diegrade/geometry.py","diegrade/frames.py"],"responsibility":"定义物理掩模、边缘和坐标变换"},
     {"id":"probe","paths":["diegrade/probe_csv.py","diegrade/batches.py"],"responsibility":"校验并映射设备表"},
+    {"id":"dispatch","paths":["diegrade/stations.py","diegrade/workorders.py","diegrade/dispatch.py"],"responsibility":"登记工位路线，优选工单并维护格点锁与整单回交"},
     {"id":"timeline","paths":["diegrade/grading.py","diegrade/timeline.py"],"responsibility":"决定档位和逐颗有效证据"},
     {"id":"intake","paths":["diegrade/intake.py"],"responsibility":"协调预检、提交和开启复测"},
     {"id":"workbench","paths":["diegrade/workbench.py"],"responsibility":"交付现场图和逐颗追溯"},
@@ -13,7 +14,7 @@
     {"id":"sorter","paths":["diegrade/sorter.py","diegrade/comparison.py"],"responsibility":"构造分选计划并解释版本变化"},
     {"id":"web","paths":["web/index.html","web/js/app.js"],"responsibility":"承载操作者的浏览、导入和交付动作"}
   ],
-  "complexity":{"mechanisms":["规则正文冻结","整数镜像旋转平移","物理邻域判档","现场代次防并发覆盖","规范批次幂等","整批原子接收","逐颗复测父链","复核重新开放","自包含证据复算","稳定的分选行与来源对账"]},
+  "complexity":{"mechanisms":["规则正文冻结","整数镜像旋转平移","物理邻域判档","现场代次防并发覆盖","规范批次幂等","整批原子接收","逐颗复测父链","复核重新开放","工位路线优选","未结工单格点锁","整单校验回交","结单原件重放","自包含证据复算","稳定的分选行与来源对账"]},
   "workflows":[
     {"id":"rules","name":"登记规则版本","entry":"POST /rules","steps":["校验阈值顺序","按名称和版本冻结"],"module_ids":["http","storage","rules"],"success":"同版同内容幂等","failure":"已登记版本不可改写","verification":"python3 -B -m tools.smoke --through rules"},
     {"id":"wafer","name":"登记晶圆形状","entry":"POST /wafers","steps":["校验物理行段和保留点","冻结选定规则"],"module_ids":["http","storage","rules","geometry"],"success":"规则后来升级不影响该片","failure":"重叠行段拒绝","verification":"python3 -B -m tools.smoke --through wafer"},
@@ -25,6 +26,7 @@
     {"id":"replay","name":"回放封存输入","entry":"GET .../releases/{rev}/replay","steps":["校验封存摘要","以原规则重算分选行"],"module_ids":["http","archive","timeline","sorter"],"success":"返回复算一致与行数","failure":"不存在的分选版不可回放","verification":"python3 -B -m tools.smoke --through replay"},
     {"id":"export","name":"下载分选表","entry":"GET .../releases/{rev}/sorter","steps":["验证分选版","序列化稳定 CSV"],"module_ids":["http","archive","sorter"],"success":"顺序固定且不含保留点","failure":"工作态不能直接导出","verification":"python3 -B -m tools.smoke --through export"},
     {"id":"hold","name":"重新开放逐颗复测","entry":"POST /wafers/{id}/holds","steps":["核实当前格点已有终档","追加复核并阻止新版签出"],"module_ids":["http","intake","storage","timeline"],"success":"旧版不变，现场待复测","failure":"保留点不能复核","verification":"python3 -B -m tools.smoke --through hold"},
-    {"id":"compare","name":"比较同片两版","entry":"GET .../compare/{old}/{new}","steps":["复算确认两个封存件","按物理坐标标记变档和来源变化"],"module_ids":["http","archive","sorter","timeline"],"success":"返回真正发生变化的点及来源","failure":"倒序版本拒绝","verification":"python3 -B -m tools.smoke --through compare"}
+    {"id":"compare","name":"比较同片两版","entry":"GET .../compare/{old}/{new}","steps":["复算确认两个封存件","按物理坐标标记变档和来源变化"],"module_ids":["http","archive","sorter","timeline"],"success":"返回真正发生变化的点及来源","failure":"倒序版本拒绝","verification":"python3 -B -m tools.smoke --through compare"},
+    {"id":"dispatch","name":"双工位路线派工与整单回交","entry":"POST /wafers/{id}/dispatch","steps":["登记工位位姿路线和额度","按开路点、待复测覆盖顺序选路线","事务内锁定格点和父量测","整单校验工位、点集和父引用","入账结单并允许原件重放"],"module_ids":["http","dispatch","probe","timeline","storage"],"success":"同一点不会同时锁给两站，回件成功后可按新量测再派工","failure":"任一行不符整单不生效，普通批次不能写锁定点","verification":"python3 -B -m tools.dispatch_smoke"}
   ]
 }
