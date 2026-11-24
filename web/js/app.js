@@ -1,6 +1,7 @@
 import {request, waferPath} from './api.js';
-import {bindBatch, clearPreview} from './batch-form.js';
+import {bindBatch, clearPreview, fillCycles} from './batch-form.js';
 import {bindCatalog, loadRules} from './catalog.js';
+import {bindCycles, renderCycles} from './cycles.js';
 import {byId, options} from './dom.js';
 import {bindTabs} from './navigation.js';
 import {bindReleases, clearComparison, renderReleases} from './releases.js';
@@ -45,6 +46,8 @@ function render(data) {
   renderCounters(data);
   renderMap(data, selected, pick);
   renderTrace(null);
+  fillCycles(data);
+  renderCycles(data);
   renderReleases(data, action);
   byId('flag-focus').disabled = !data?.cells.some(c => c.state === 'missing' || c.state === 'review');
 }
@@ -68,6 +71,7 @@ async function open(id = byId('wafer').value) {
 function initialize() {
   bindTabs();
   bindBatch(action, current, open);
+  bindCycles(action, current, open);
   bindCatalog(action, open);
   bindReleases(action, current, open);
   byId('reload').addEventListener('click', action(() => open()));

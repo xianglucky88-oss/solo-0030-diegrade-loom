@@ -16,6 +16,7 @@ from diegrade.httpd import make_server
 HEADER = 'x,y,contact,leak_na,margin_mv,parent\n'
 DEMO = Path(__file__).resolve().parent.parent / 'examples'
 SHAPE = '/api/diegrade/wafers/LX-19'
+CYCLE = '/api/diegrade/wafers/CX-03'
 
 
 class Station:
@@ -123,7 +124,7 @@ def seal(s):
 def replay(s):
     result = s.wafer('/releases/2/replay')
     assert result['verified'] and result['rows'] == 8 and result['sha256'] == s.release['sha256']
-    s.wafer('/releases/1/replay', error=(404, 'release_missing'))
+    assert result['batches'][0]['sites']
 
 
 def export(s):
@@ -154,12 +155,70 @@ def compare(s):
     assert s.wafer('/releases/2/sorter') == s.old_bytes
 
 
-STEPS = (rules, wafer, preview, ingest, grid, trace, seal, replay, export, hold, compare)
+def cycle(s):
+    """3×3 晶圆用对准标记确认位姿后接纳量测；旧批次仍可不用标记。"""
+    s.request('/api/diegrade/rules', {'name': 'edgecal', 'version': 1, 'leak_limit': 100,
+                                       'margin_min': 40, 'grade_a': 80, 'edge_add': 10, 'guard': 3})
+    shape = {'id': 'CX-03', 'spans': [[-1, -1, 1], [0, -1, 1], [1, -1, 1]],
+             'reserved': [[0, 0], [0, 1]], 'rule': 'edgecal', 'rule_version': 1}
+    s.request('/api/diegrade/wafers', shape)
+    s.request(CYCLE + '/cycles', {'expected': 0, 'cycle': {
+        'id': 'K1', 'poses': [[0, False], [2, False]], 'markers': {'M0': [0, 0], 'M1': [0, 1]}}})
+    # 位姿尚未确定：首测被拒，代次不推进。
+    body = {'expected': 1, 'batch': {'id': 'S1', 'kind': 'screen', 'cycle': 'K1',
+            'csv': HEADER + '1,0,ok,10,96,\n-1,0,ok,10,75,\n'}}
+    s.request(CYCLE + '/batches', body, (409, 'cycle_unconfirmed'))
+    assert s.request(CYCLE)['revision'] == 1
+    # 中心标记只给出两种可能；重送不增加证据。
+    first = s.request(CYCLE + '/cycles/K1/marks', {'expected': 1, 'marker': 'M0', 'device': [0, 0]})
+    assert first['state']['state'] == 'undetermined' and first['revision'] == 2
+    assert s.request(CYCLE + '/cycles/K1/marks', {'expected': 2, 'marker': 'M0', 'device': [0, 0]})['duplicate']
+    # (0,1) 标记从 (0,-1) 报到，唯一合法位姿为 180 度。
+    second = s.request(CYCLE + '/cycles/K1/marks', {'expected': 2, 'marker': 'M1', 'device': [0, -1]})
+    assert second['newly_locked'] and second['state']['state'] == 'confirmed'
+    assert second['state']['pose'] == {'offset': [0, 0], 'turn': 2, 'mirror': False}
+    s.request(CYCLE + '/cycles/K1/marks', {'expected': 3, 'marker': 'M1', 'device': [0, 1]},
+              (409, 'cycle_observation_conflict'))
+    body['expected'] = 3
+    body['batch']['id'] = 'S1'
+    assert s.request(CYCLE + '/batches', body)['revision'] == 4
+    rest = HEADER + '1,1,ok,10,90,\n0,1,ok,10,75,\n-1,1,ok,10,90,\n1,-1,ok,10,75,\n-1,-1,ok,10,90,\n'
+    assert s.request(CYCLE + '/batches', {'expected': 4, 'batch': {'id': 'S2', 'kind': 'screen',
+              'cycle': 'K1', 'csv': rest}})['revision'] == 5
+    s.request(CYCLE + '/batches', {'expected': 5, 'batch': {'id': 'S3', 'kind': 'screen', 'cycle': 'K1',
+              'frame': {'offset': [0, 0], 'turn': 0, 'mirror': False}, 'csv': HEADER + '1,0,ok,10,96,\n'}},
+              (409, 'cycle_pose_conflict'))
+    s.request(CYCLE + '/releases', {'expected': 5})
+    replay = s.request(CYCLE + '/releases/5/replay')
+    assert replay['verified'] and replay['cycles'][0]['pose']['turn'] == 2
+    s.package = json.loads(s.request(CYCLE + '/releases/5/manifest'))
+    receipt = s.request('/api/diegrade/verify', {'wafer': 'CX-03', **s.package})
+    assert receipt['verified'] and receipt['wafer'] == 'CX-03'
+    # 接收方复算应报出各批次采用的位姿与归到的物理点。
+    by_id = {item['id']: item for item in receipt['batches']}
+    assert by_id['S1']['pose']['turn'] == 2 and [-1, 0] in by_id['S1']['sites'] and [1, 0] in by_id['S1']['sites']
+    rows = {(row['x'], row['y']): row['bin'] for row in s.package['payload']['rows']}
+    assert rows == {(0, -1): 'b', (1, -1): 'a', (-1, -1): 'a', (-1, 1): 'b', (1, 1): 'a', (-1, 0): 'a', (1, 0): 'b'}, rows
+    # 同一份标记证据改成 0 度，重建行与摘要后接收方仍须拒绝。
+    from diegrade.codec import digest
+    from diegrade.sorter import assignments
+    from diegrade.timeline import replay_timeline
+    forged = json.loads(json.dumps(s.package))
+    forged['payload']['cycles'][0]['pose'] = {'offset': [0, 0], 'turn': 0, 'mirror': False}
+    forged['sha256'] = digest(forged['payload'])
+    s.request('/api/diegrade/verify', forged, (409, 'release_replay'))
+    # 旧批次仍可不选周期、自带坐标系。
+    s.request(CYCLE + '/batches', {'expected': 5, 'batch': {
+        'id': 'LEGACY', 'kind': 'screen', 'frame': {'offset': [0, 0], 'turn': 0, 'mirror': False},
+        'csv': HEADER + '1,0,ok,10,96,\n'}}, (409, 'screen_exists'))
+
+
+STEPS = (rules, wafer, preview, ingest, grid, trace, seal, replay, export, hold, compare, cycle)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--through', choices=[flow.__name__ for flow in STEPS], default='compare')
+    parser.add_argument('--through', choices=[flow.__name__ for flow in STEPS], default='cycle')
     args = parser.parse_args()
     with TemporaryDirectory(prefix='diegrade-smoke-') as temp, make_server(Database(Path(temp) / 'db'), 0) as server:
         worker = Thread(target=server.serve_forever, daemon=True)

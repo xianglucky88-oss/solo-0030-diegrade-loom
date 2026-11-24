@@ -40,6 +40,7 @@
     <section class="operations" id="operations" aria-label="现场操作">
       <div role="tablist" class="tabs" aria-label="操作类型" id="tabs">
         <button type="button" id="tab-batch" data-panel="batch" role="tab" aria-selected="true" aria-controls="batch">批次预检与导入</button>
+        <button type="button" id="tab-cycle" data-panel="cycle" role="tab" aria-selected="false" aria-controls="cycle" tabindex="-1">装夹周期与标记</button>
         <button type="button" id="tab-hold" data-panel="hold" role="tab" aria-selected="false" aria-controls="hold" tabindex="-1">复核登记</button>
         <button type="button" id="tab-release" data-panel="release" role="tab" aria-selected="false" aria-controls="release" tabindex="-1">分选交付</button>
         <button type="button" id="tab-catalog" data-panel="catalog" role="tab" aria-selected="false" aria-controls="catalog" tabindex="-1">规则与晶圆</button>
@@ -49,16 +50,43 @@
           <div class="row">
             <label>批次编号 <input name="id" required maxlength="40" autocomplete="off"></label>
             <label>测量类型 <select name="kind"><option value="screen">首测</option><option value="repeat">复测</option></select></label>
+            <label>装夹周期 <select name="cycle"></select></label>
             <label>逆时针旋转 <select name="turn"><option value="0">0°</option><option value="1">90°</option><option value="2">180°</option><option value="3">270°</option></select></label>
             <label>横向平移 <input type="number" name="dx" value="0" min="-2048" max="2048" required></label>
             <label>纵向平移 <input type="number" name="dy" value="0" min="-2048" max="2048" required></label>
             <label class="check"><input type="checkbox" name="mirror"> 横轴镜像</label>
           </div>
+          <p class="hint">选择装夹周期时按锁定位姿归一，手填的旋转、平移与镜像不参与；未选周期则用右侧坐标系。</p>
           <label>探针表文件 <input type="file" id="file" accept=".csv,text/csv"></label>
           <label>探针表内容 <textarea name="csv" rows="5" required spellcheck="false" placeholder="x,y,contact,leak_na,margin_mv,parent"></textarea></label>
           <div class="row"><button name="mode" value="preview">预检批次</button><button class="primary" name="mode" value="batches">导入批次</button></div>
           <div id="preview" class="output"></div>
         </form>
+      </section>
+      <section id="cycle" role="tabpanel" aria-labelledby="tab-cycle" hidden>
+        <div class="catalog">
+          <form id="cycle-form">
+            <h2>登记装夹周期</h2>
+            <div class="row">
+              <label>周期编号 <input name="id" required maxlength="40" autocomplete="off"></label>
+              <label>允许旋转 <input name="turns" value="0,180" required placeholder="0,180"></label>
+              <label class="check"><input type="checkbox" name="mirror"> 允许镜像</label>
+            </div>
+            <label>对准标记 <textarea name="markers" required rows="3" spellcheck="false" placeholder='[{"id":"M0","site":[0,0]},{"id":"M1","site":[0,1]}]'></textarea></label>
+            <button>登记周期</button>
+          </form>
+          <form id="mark-form">
+            <h2>标记观测</h2>
+            <div class="row">
+              <label>周期 <select name="cycle" required></select></label>
+              <label>标记编号 <input name="marker" required maxlength="40" autocomplete="off"></label>
+              <label>设备横坐标 <input name="x" type="number" min="-2048" max="2048" required></label>
+              <label>设备纵坐标 <input name="y" type="number" min="-2048" max="2048" required></label>
+            </div>
+            <button>报送观测</button>
+          </form>
+        </div>
+        <div id="cycles" class="output"></div>
       </section>
       <section id="hold" role="tabpanel" aria-labelledby="tab-hold" hidden>
         <form id="hold-form">

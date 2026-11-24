@@ -4,9 +4,9 @@
 
 ## 对象与所有权
 
-规则按名称和版本冻结；登记晶圆时固定物理掩模、保留点与规则正文。每个晶圆有连续增加的现场代次，包含首测或复测批次和逐点复核事件。有效测量引用具体的源批次与设备坐标；一份封存分选版捕获某代完整输入与计划。
+规则按名称和版本冻结；登记晶圆时固定物理掩模、保留点与规则正文。每个晶圆有连续增加的现场代次，包含首测或复测批次、逐点复核事件，以及可选的装夹周期与对准标记观测。有效测量引用具体的源批次与设备坐标；一份封存分选版捕获某代完整输入与计划。
 
-`geometry` 定义物理掩模，`frames` 定义设备坐标变换。边缘判定用四邻域；保留点仍算物理邻居。`probe_csv` 解析输入，`batches` 校验批次投影，`grading` 只负责分档规则，`timeline` 用时间上的现场代次约束事件并重建逐点事实。`database`、`events` 提供读一致性与原子追加；`intake` 协调预检和入库。`sorter`、`archives`、`comparison` 分别处理交付行、封存复算和版差。`routes`、`httpd`、`web` 负责传输与操作，不自行重算档位。
+`geometry` 定义物理掩模，`frames` 定义设备坐标变换。边缘判定用四邻域；保留点仍算物理邻居。`probe_csv` 解析输入，`batches` 校验批次投影，`grading` 只负责分档规则，`cycles` 用对准标记求解装夹位姿，`timeline` 用时间上的现场代次约束事件并重建逐点事实。`database`、`events` 提供读一致性与原子追加；`intake` 协调预检和入库。`sorter`、`archives`、`comparison` 分别处理交付行、封存复算和版差。`routes`、`httpd`、`web` 负责传输与操作，不自行重算档位。
 
 ## 判档和复测
 
@@ -17,21 +17,36 @@
 5. 变更请求使用 `expected` 现场代次。预检运行同套校验但不持久化。实写在 SQLite 写事务内重新验证；任意行违规均不推进代次。在当前代次下重发同一规范内容返回幂等结果，换内容不允许复用编号。
 6. 未测或待复测均阻止签出。已签出版保留原样，下载前校验摘要并重算。两版比较按物理格点关联，区分档位变化和同档的来源变化。
 
+## 装夹周期与对准标记
+
+1. 登记周期时固定所属晶圆、允许的旋转与镜像组合（`poses`），以及各标记在物理掩模上的坐标（`markers`）。标记必须是掩模内的物理点。
+2. 标记观测按 `{marker, device}` 分多次报送。对每个允许朝向，全部观测必须由同一个平移解释，才算该朝向可行。求解只看标记观测，绝不参照量测批次能否入库。
+3. 可行朝向为零时状态为 `inconsistent`，指出观测不一致；多个可行朝向时状态为 `undetermined`。两种状态都拒绝引用该周期的量测，且不推进代次。
+4. 可行朝向恰好一个时确认并锁定当时配置与观测。同一标记以同一设备坐标重送不增加证据。锁定后再送与锁定位姿冲突的观测返回 409。
+5. 引用周期的首测和复测一律按锁定位姿归一。批次自带 `frame` 时须与锁定位姿一致，冲突则拒绝来件。新装夹周期须单独登记并独立确认。
+6. 量测仍按原有物理格点、保留点与复测父链校验。未引用周期的旧批次继续使用自带坐标系；缺少 `cycles` 字段的旧封存件按 `diegrade.release.1` 原样回放。
+7. 封存件记录每个周期的配置、全部观测与确认时的原始标记。接收方可只用随件包独立复算各批次采用的位姿与归到的物理点；把同一份标记证据改成别的位姿（即便重算摘要）必须核验失败。
+
 ## 本机 HTTP 接口
 
-前缀为 `/api/diegrade`；除文件下载外使用 UTF-8 JSON。典型校验失败返回 422，已存在记录或现场代次冲突返回 409，未找到返回 404。
+前缀为 `/api/diegrade`；除文件下载外使用 UTF-8 JSON。典型校验失败返回 422，已存在记录、现场代次冲突或位姿冲突返回 409，未找到返回 404。
 
 | 方法 | 路径 | 操作 |
 | --- | --- | --- |
 | GET / POST | `/rules` | 列表 / 冻结规则版本 |
 | GET / POST | `/wafers` | 列表 / 登记晶圆 |
-| GET | `/wafers/{id}` | 格点图、计数、可签状态 |
+| GET | `/wafers/{id}` | 格点图、计数、可签状态、装夹周期 |
 | GET | `/wafers/{id}/cells/{x}/{y}` | 格点证据与判档阈值 |
+| GET | `/wafers/{id}/cycles` | 列出装夹周期与位姿状态 |
+| GET | `/wafers/{id}/cycles/{cycle}` | 单个周期的标记、观测与候选位姿 |
 | POST | `/wafers/{id}/preview` | 批次试算，不写入 |
 | POST | `/wafers/{id}/batches` | 原子写入批次 |
+| POST | `/wafers/{id}/cycles` | 登记装夹周期 |
+| POST | `/wafers/{id}/cycles/{cycle}/marks` | 报送一条或多条标记观测 |
 | POST | `/wafers/{id}/holds` | 逐点复核并重新开放复测 |
 | POST | `/wafers/{id}/releases` | 固定一代分选版 |
 | GET | `/wafers/{id}/releases/{rev}/{replay,manifest,sorter}` | 复算、下载证据包或分选表 |
+| POST | `/verify` | 接收方用随件包独立复算 |
 | GET | `/wafers/{id}/compare/{old}/{new}` | 同片版差 |
 
-批次正文为 `{expected,batch:{id,kind,frame:{offset,turn,mirror},csv}}`；复核正文为 `{expected,id,site,reason}`；签出正文为 `{expected}`。规则与晶圆输入见 `examples/sample.json`。独立测试套件暂缓；`tools.smoke` 对真实入口执行临时 HTTP 工作流。
+批次正文为 `{expected,batch:{id,kind,frame:{offset,turn,mirror},csv}}`，引用装夹周期时改为 `{expected,batch:{id,kind,cycle,csv}}`；复核正文为 `{expected,id,site,reason}`；签出正文为 `{expected}`。周期正文为 `{expected,cycle:{id,poses,markers}}`，其中 `poses` 为 `[{turn,mirror}]`、`markers` 为 `{编号:[x,y]}` 或 `[{id,site}]`。标记观测正文为 `{expected,marker,device:[x,y]}` 或 `{expected,observations:[{marker,device}]}`。规则与晶圆输入见 `examples/sample.json`。独立测试套件暂缓；`tools.smoke`、`tools.check_cycle`、`tools.check_legacy` 对真实入口执行临时 HTTP 与复算工作流。

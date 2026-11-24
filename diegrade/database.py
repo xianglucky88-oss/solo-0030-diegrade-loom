@@ -2,7 +2,7 @@ from contextlib import contextmanager
 from pathlib import Path
 import sqlite3
 
-from .schema import SQL, VERSION
+from .schema import MIGRATE_1_TO_2, SQL, VERSION
 
 
 class Database:
@@ -13,6 +13,10 @@ class Database:
             version, = conn.execute('PRAGMA user_version').fetchone()
             if version == 0:
                 for statement in SQL.split(';'):
+                    if statement.strip():
+                        conn.execute(statement)
+            elif version == 1:
+                for statement in MIGRATE_1_TO_2.split(';'):
                     if statement.strip():
                         conn.execute(statement)
             elif version != VERSION:

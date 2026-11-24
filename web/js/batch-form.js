@@ -4,6 +4,15 @@ import {flash, labels} from './status.js';
 
 export function clearPreview() { byId('preview').replaceChildren(); }
 
+export function fillCycles(data) {
+  const select = byId('batch-form').elements.cycle;
+  const cycles = data?.cycles ?? [];
+  const current = select.value;
+  select.replaceChildren(new Option('（不用标记，手填坐标系）', ''),
+    ...cycles.map(cycle => new Option(`${cycle.id} · ${cycle.state === 'confirmed' ? '位姿已确认' : cycle.state === 'inconsistent' ? '观测不一致' : '尚未确定'}`, cycle.id)));
+  if (cycles.some(cycle => cycle.id === current)) select.value = current;
+}
+
 export function bindBatch(action, current, reload) {
   const form = byId('batch-form');
   let changed = 0;
@@ -25,8 +34,10 @@ export function bindBatch(action, current, reload) {
     const values = new FormData(form);
     const {wafer, revision} = current();
     const id = wafer.id;
-    const batch = {id: values.get('id'), kind: values.get('kind'), csv: values.get('csv'),
-      frame: {offset: [Number(values.get('dx')), Number(values.get('dy'))], turn: Number(values.get('turn')), mirror: values.has('mirror')}};
+    const cycle = String(values.get('cycle') || '');
+    const batch = {id: values.get('id'), kind: values.get('kind'), csv: values.get('csv')};
+    if (cycle) { batch.cycle = cycle; }
+    else batch.frame = {offset: [Number(values.get('dx')), Number(values.get('dy'))], turn: Number(values.get('turn')), mirror: values.has('mirror')};
     clearPreview();
     const outcome = await request(waferPath(id, `/${mode}`), {expected: revision, batch});
     if (mode === 'batches') {

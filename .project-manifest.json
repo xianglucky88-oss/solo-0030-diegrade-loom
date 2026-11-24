@@ -6,6 +6,7 @@
     {"id":"rules","paths":["diegrade/rules.py","diegrade/wafers.py"],"responsibility":"登记规则版本和冻结晶圆输入"},
     {"id":"geometry","paths":["diegrade/geometry.py","diegrade/frames.py"],"responsibility":"定义物理掩模、边缘和坐标变换"},
     {"id":"probe","paths":["diegrade/probe_csv.py","diegrade/batches.py"],"responsibility":"校验并映射设备表"},
+    {"id":"cycles","paths":["diegrade/cycles.py"],"responsibility":"用对准标记求解装夹位姿并锁定"},
     {"id":"timeline","paths":["diegrade/grading.py","diegrade/timeline.py"],"responsibility":"决定档位和逐颗有效证据"},
     {"id":"intake","paths":["diegrade/intake.py"],"responsibility":"协调预检、提交和开启复测"},
     {"id":"workbench","paths":["diegrade/workbench.py"],"responsibility":"交付现场图和逐颗追溯"},
@@ -13,18 +14,20 @@
     {"id":"sorter","paths":["diegrade/sorter.py","diegrade/comparison.py"],"responsibility":"构造分选计划并解释版本变化"},
     {"id":"web","paths":["web/index.html","web/js/app.js"],"responsibility":"承载操作者的浏览、导入和交付动作"}
   ],
-  "complexity":{"mechanisms":["规则正文冻结","整数镜像旋转平移","物理邻域判档","现场代次防并发覆盖","规范批次幂等","整批原子接收","逐颗复测父链","复核重新开放","自包含证据复算","稳定的分选行与来源对账"]},
+  "complexity":{"mechanisms":["规则正文冻结","整数镜像旋转平移","物理邻域判档","现场代次防并发覆盖","规范批次幂等","整批原子接收","逐颗复测父链","复核重新开放","对准标记可行位姿求解","全观测共用单一平移","位姿确认后锁定","装夹周期独立确认","自包含证据复算","稳定的分选行与来源对账"]},
   "workflows":[
     {"id":"rules","name":"登记规则版本","entry":"POST /rules","steps":["校验阈值顺序","按名称和版本冻结"],"module_ids":["http","storage","rules"],"success":"同版同内容幂等","failure":"已登记版本不可改写","verification":"python3 -B -m tools.smoke --through rules"},
     {"id":"wafer","name":"登记晶圆形状","entry":"POST /wafers","steps":["校验物理行段和保留点","冻结选定规则"],"module_ids":["http","storage","rules","geometry"],"success":"规则后来升级不影响该片","failure":"重叠行段拒绝","verification":"python3 -B -m tools.smoke --through wafer"},
     {"id":"preview","name":"试算归一批次","entry":"POST /wafers/{id}/preview","steps":["解析探针表与坐标系","复算拟写入的格点判档"],"module_ids":["http","intake","geometry","probe","timeline","storage"],"success":"列出拟变更但代次不变","failure":"保留点不可投测","verification":"python3 -B -m tools.smoke --through preview"},
     {"id":"ingest","name":"导入探针批次","entry":"POST /wafers/{id}/batches","steps":["检查代次和规范批次内容","原子提交全部有效行"],"module_ids":["http","intake","probe","timeline","storage"],"success":"逆序重传仍幂等","failure":"任一父引用错误阻止整批","verification":"python3 -B -m tools.smoke --through ingest"},
+    {"id":"cycle","name":"确认装夹位姿","entry":"POST /wafers/{id}/cycles","steps":["登记允许位姿与标记物理坐标","分次接收标记观测","按全部观测求唯一可行位姿并锁定"],"module_ids":["http","storage","cycles","timeline","geometry"],"success":"唯一位姿确认并锁定，重复观测不增证据","failure":"零个可行位姿报不一致，多个可行位姿报未确定","verification":"python3 -B -m tools.smoke --through cycle"},
     {"id":"grid","name":"复核格点状态","entry":"GET /wafers/{id}","steps":["读取并归并现场记录","组成图、计数及可签状态"],"module_ids":["http","workbench","intake","timeline"],"success":"独立显示未测和待复测","failure":"错误晶圆不可查看","verification":"python3 -B -m tools.smoke --through grid"},
     {"id":"trace","name":"追查逐颗证据","entry":"GET /wafers/{id}/cells/{x}/{y}","steps":["定位物理点与邻域","沿现场事件输出设备坐标和判档依据"],"module_ids":["http","workbench","timeline","geometry"],"success":"能够追溯四分之一圈变换前的记录","failure":"掩模外格点拒绝","verification":"python3 -B -m tools.smoke --through trace"},
     {"id":"seal","name":"签出完整分选版","entry":"POST /wafers/{id}/releases","steps":["校验代次与整片就绪","封存证据与分选行"],"module_ids":["http","archive","storage","sorter","timeline"],"success":"同代重复签出摘要不变","failure":"有未完成格点不可签出","verification":"python3 -B -m tools.smoke --through seal"},
     {"id":"replay","name":"回放封存输入","entry":"GET .../releases/{rev}/replay","steps":["校验封存摘要","以原规则重算分选行"],"module_ids":["http","archive","timeline","sorter"],"success":"返回复算一致与行数","failure":"不存在的分选版不可回放","verification":"python3 -B -m tools.smoke --through replay"},
     {"id":"export","name":"下载分选表","entry":"GET .../releases/{rev}/sorter","steps":["验证分选版","序列化稳定 CSV"],"module_ids":["http","archive","sorter"],"success":"顺序固定且不含保留点","failure":"工作态不能直接导出","verification":"python3 -B -m tools.smoke --through export"},
     {"id":"hold","name":"重新开放逐颗复测","entry":"POST /wafers/{id}/holds","steps":["核实当前格点已有终档","追加复核并阻止新版签出"],"module_ids":["http","intake","storage","timeline"],"success":"旧版不变，现场待复测","failure":"保留点不能复核","verification":"python3 -B -m tools.smoke --through hold"},
+    {"id":"receipt","name":"接收方独立复算","entry":"POST /verify","steps":["用随件周期配置与确认时的原始标记复解位姿","按锁定位姿重建各批次归到的物理点"],"module_ids":["http","archive","cycles","timeline","sorter"],"success":"各批次位姿与分选行复算一致","failure":"篡改位姿或丢弃标记证据核验失败","verification":"python3 -B -m tools.check_legacy"},
     {"id":"compare","name":"比较同片两版","entry":"GET .../compare/{old}/{new}","steps":["复算确认两个封存件","按物理坐标标记变档和来源变化"],"module_ids":["http","archive","sorter","timeline"],"success":"返回真正发生变化的点及来源","failure":"倒序版本拒绝","verification":"python3 -B -m tools.smoke --through compare"}
   ]
 }

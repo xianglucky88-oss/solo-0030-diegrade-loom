@@ -3,7 +3,6 @@ import re
 from . import archives, comparison, intake, rules, wafers, workbench
 from .errors import DomainError
 from .sorter import as_csv
-from .validation import integer
 
 PATTERNS = []
 
@@ -40,6 +39,16 @@ def wafer_summary(conn, _, wafer):
     return workbench.summary(conn, wafer)
 
 
+@route('GET', r'/wafers/([^/]+)/cycles')
+def cycle_list(conn, _, wafer):
+    return workbench.cycles(conn, wafer)
+
+
+@route('GET', r'/wafers/([^/]+)/cycles/([^/]+)')
+def cycle_view(conn, _, wafer, cycle):
+    return workbench.cycle(conn, wafer, cycle)
+
+
 @route('GET', r'/wafers/([^/]+)/cells/(-?[0-9]{1,4})/(-?[0-9]{1,4})')
 def cell_trace(conn, _, wafer, x, y):
     return workbench.trace(conn, wafer, (int(x), int(y)))
@@ -53,6 +62,23 @@ def preview(conn, body, wafer):
 @route('POST', r'/wafers/([^/]+)/batches', write=True)
 def submit(conn, body, wafer):
     return intake.intake(conn, wafer, body, write=True)
+
+
+@route('POST', r'/wafers/([^/]+)/cycles', write=True)
+def register_cycle(conn, body, wafer):
+    return intake.register_cycle(conn, wafer, body)
+
+
+@route('POST', r'/wafers/([^/]+)/cycles/([^/]+)/(marks|observations)', write=True)
+def observe(conn, body, wafer, cycle, _action):
+    if not isinstance(body, dict):
+        raise DomainError('fields', '标记观测须为对象')
+    return intake.observe(conn, wafer, body, cycle)
+
+
+@route('POST', r'/wafers/([^/]+)/marks', write=True)
+def observe_named(conn, body, wafer):
+    return intake.observe(conn, wafer, body)
 
 
 @route('POST', r'/wafers/([^/]+)/holds', write=True)
@@ -76,6 +102,11 @@ def archive_action(conn, _, wafer, seq, action):
     if action == 'manifest':
         return archive, 'application/json; charset=utf-8', f'{wafer}-r{revision}.json'
     return as_csv(archive['payload']['rows']), 'text/csv; charset=utf-8', f'{wafer}-r{revision}.csv'
+
+
+@route('POST', r'/verify')
+def verify_package(conn, body):
+    return archives.verify_package(body)
 
 
 @route('GET', r'/wafers/([^/]+)/compare/([0-9]{1,3})/([0-9]{1,3})')

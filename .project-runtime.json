@@ -9,6 +9,8 @@
     {"workflow_id":"wafer","command":"python3 -B -m tools.smoke --through wafer"},
     {"workflow_id":"preview","command":"python3 -B -m tools.smoke --through preview"},
     {"workflow_id":"ingest","command":"python3 -B -m tools.smoke --through ingest"},
+    {"workflow_id":"cycle","command":"python3 -B -m tools.smoke --through cycle"},
+    {"workflow_id":"receipt","command":"python3 -B -m tools.check_legacy"},
     {"workflow_id":"grid","command":"python3 -B -m tools.smoke --through grid"},
     {"workflow_id":"trace","command":"python3 -B -m tools.smoke --through trace"},
     {"workflow_id":"seal","command":"python3 -B -m tools.smoke --through seal"},

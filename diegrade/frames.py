@@ -12,10 +12,22 @@ def frame(value):
     return value
 
 
-def normalize(mapping, x, y):
+def orient(mapping, x, y):
+    """按镜像、再逆时针旋转，得到未平移的设备坐标。"""
     if mapping['mirror']:
         x = -x
     for _ in range(mapping['turn']):
         x, y = -y, x
+    return x, y
+
+
+def normalize(mapping, x, y):
+    x, y = orient(mapping, x, y)
     ox, oy = mapping['offset']
     return x + ox, y + oy
+
+
+def same(first, second):
+    return (first['turn'] == second['turn'] and first['mirror'] == second['mirror']
+            and tuple(first['offset']) == tuple(second['offset']))
+
