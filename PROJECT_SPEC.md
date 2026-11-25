@@ -17,6 +17,17 @@
 5. 变更请求使用 `expected` 现场代次。预检运行同套校验但不持久化。实写在 SQLite 写事务内重新验证；任意行违规均不推进代次。在当前代次下重发同一规范内容返回幂等结果，换内容不允许复用编号。
 6. 未测或待复测均阻止签出。已签出版保留原样，下载前校验摘要并重算。两版比较按物理格点关联，区分档位变化和同档的来源变化。
 
+## 两站复测轮次
+
+同一颗芯粒可要求两个指定工位各复测一次，由复核员裁决采用其中一份。
+
+1. 复核员只能为当前待复测格点开立有独立编号的轮次，同时登记两个互不相同的工位。开轮时锁定该点当时的最新有效测量为父量测（`parent`）；父量测在轮次结案前不变。同一格点同时只能有一个未结轮次。
+2. 每份来件是一个单颗复测批次，按该工位自己的设备位姿归一，须带所属轮次、登记工位、父批次与指定物理点。父批次须等于锁定父量测，归一点须等于轮次指定格点，工位须已登记。两站可按任意顺序送件，每站只接受第一份符合条件来件；原样重送幂等，改变内容返回 409 且不覆盖已收证据。开路也作为该站证据保存。
+3. 两站来件齐备前不得签出，也不得裁决。齐备后复核员按当前现场代次提交有编号与事由的裁决，只能选中一份可终判（甲档、乙档或不合格）的来件；开路来件不能终判。裁决是普通复核事件，写入格点并替换其父批次。同代并发裁决只有一个生效，其余因代次冲突或轮次已结失败。
+4. 两站都送回开路时，复核员可作废本轮；父量测保留，格点继续待复测，两次开路证据留存，可用同一格点另开新轮。作废轮不再接收来件，写旧轮编号的迟到来件被拒且不占用新轮名额。
+5. 轮次未结时，普通复测批次不能替该格点改档（返回 409），其他格点照常处理。裁决后的新复核不会改动已签版本。
+6. 签出时封存轮次快照：轮次编号、格点、父量测、两站候选、裁决与作废记录。复算在原有摘要校验与行表重算之外，还要求随件轮次与现场重放一致、每轮候选齐备且同点同父、裁决指向候选、最终分选行取自该裁决来件。缺少任一工位来件、行表被改回另一档、或摘要与文字不符的签件均拒绝复算。未开启轮次的旧签件（`diegrade.release.1`）仍按原流程下载与复算。
+
 ## 本机 HTTP 接口
 
 前缀为 `/api/diegrade`；除文件下载外使用 UTF-8 JSON。典型校验失败返回 422，已存在记录或现场代次冲突返回 409，未找到返回 404。
@@ -25,13 +36,17 @@
 | --- | --- | --- |
 | GET / POST | `/rules` | 列表 / 冻结规则版本 |
 | GET / POST | `/wafers` | 列表 / 登记晶圆 |
-| GET | `/wafers/{id}` | 格点图、计数、可签状态 |
+| GET | `/wafers/{id}` | 格点图、计数、可签状态、轮次 |
 | GET | `/wafers/{id}/cells/{x}/{y}` | 格点证据与判档阈值 |
 | POST | `/wafers/{id}/preview` | 批次试算，不写入 |
 | POST | `/wafers/{id}/batches` | 原子写入批次 |
 | POST | `/wafers/{id}/holds` | 逐点复核并重新开放复测 |
+| POST | `/wafers/{id}/rounds` | 开立两站复测轮次 |
+| POST | `/wafers/{id}/rounds/{rid}/submissions` | 登记某工位来件 |
+| POST | `/wafers/{id}/rounds/{rid}/verdicts` | 裁决采用来件 |
+| POST | `/wafers/{id}/rounds/{rid}/voids` | 作废两站开路轮次 |
 | POST | `/wafers/{id}/releases` | 固定一代分选版 |
 | GET | `/wafers/{id}/releases/{rev}/{replay,manifest,sorter}` | 复算、下载证据包或分选表 |
 | GET | `/wafers/{id}/compare/{old}/{new}` | 同片版差 |
 
-批次正文为 `{expected,batch:{id,kind,frame:{offset,turn,mirror},csv}}`；复核正文为 `{expected,id,site,reason}`；签出正文为 `{expected}`。规则与晶圆输入见 `examples/sample.json`。独立测试套件暂缓；`tools.smoke` 对真实入口执行临时 HTTP 工作流。
+批次正文为 `{expected,batch:{id,kind,frame:{offset,turn,mirror},csv}}`；复核正文为 `{expected,id,site,reason}`；开轮正文为 `{expected,id,site,stations,reason}`；来件正文为 `{expected,station,batch}`；裁决正文为 `{expected,id,station,reason}`；作废正文为 `{expected,id,reason}`；签出正文为 `{expected}`。规则与晶圆输入见 `examples/sample.json`。独立测试套件暂缓；`tools.smoke` 对真实入口执行临时 HTTP 工作流。

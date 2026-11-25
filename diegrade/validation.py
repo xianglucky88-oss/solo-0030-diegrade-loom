@@ -25,3 +25,9 @@ def reason(value):
     if not isinstance(value, str) or not 1 <= len(value.strip()) <= 240:
         raise DomainError('reason', '复核说明须为 1–240 字')
     return value.strip()
+
+
+def stations(value):
+    if not isinstance(value, list) or len(value) != 2 or len(set(value)) != 2:
+        raise DomainError('stations', '轮次须登记两个互不相同的工位')
+    return [identifier(name) for name in value]

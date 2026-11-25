@@ -36,7 +36,7 @@ class Station:
             assert (exc.code, box['error']) == error, box
             return box
         assert error is None, f'{path} should fail with {error}'
-        return json.loads(raw) if mime == 'application/json' and not path.endswith('/manifest') else raw
+        return json.loads(raw) if mime == 'application/json' and '/manifest' not in path else raw
 
     def wafer(self, suffix='', body=None, error=None):
         return self.request(SHAPE + suffix, body, error)
@@ -154,12 +154,98 @@ def compare(s):
     assert s.wafer('/releases/2/sorter') == s.old_bytes
 
 
-STEPS = (rules, wafer, preview, ingest, grid, trace, seal, replay, export, hold, compare)
+def rounds(s):
+    """同一颗芯粒由两个指定工位各复测一次，复核员裁决采用其中一份。"""
+    s.rev = 4
+    s.wafer('/holds', {'expected': s.rev, 'site': [0, 0], 'id': 'H10', 'reason': '两站复测'})
+    s.rev = 5
+    opened = s.wafer('/rounds', {'expected': s.rev, 'id': 'R10', 'site': [0, 0],
+                                 'stations': ['S1', 'S2'], 'reason': '内部点复测'})
+    assert opened == {'revision': 6, 'duplicate': False, 'parent': 'C01'}, opened
+    s.rev = 6
+    s.wafer('/rounds', {'expected': s.rev, 'id': 'R11', 'site': [0, 0], 'stations': ['S1', 'S2'],
+                        'reason': '重叠'}, (409, 'round_open'))
+    s.batch('X', '0,0,ok,90,60,C01\n', 'repeat', expected=s.rev, error=(409, 'round_open'))
+    sub = '/rounds/R10/submissions'
+    frame0 = {'offset': [0, 0], 'turn': 0, 'mirror': False}
+    s.wafer(sub, {'expected': s.rev, 'station': 'S1', 'batch': {'id': 'S1A', 'kind': 'repeat',
+        'frame': frame0, 'csv': HEADER + '-1,0,ok,90,70,C01\n'}}, (422, 'submission_site'))
+    s.wafer(sub, {'expected': s.rev, 'station': 'S1', 'batch': {'id': 'S1A', 'kind': 'repeat',
+        'frame': frame0, 'csv': HEADER + '0,0,ok,90,85,C01\n'}})
+    s.rev = 7
+    s.wafer(sub, {'expected': s.rev, 'station': 'S1', 'batch': {'id': 'S1B', 'kind': 'repeat',
+        'frame': frame0, 'csv': HEADER + '0,0,ok,90,84,C01\n'}}, (409, 'submission_conflict'))
+    assert s.wafer(sub, {'expected': s.rev, 'station': 'S1', 'batch': {'id': 'S1A', 'kind': 'repeat',
+        'frame': frame0, 'csv': HEADER + '0,0,ok,90,85,C01\n'}})['duplicate']
+    s.wafer('/releases', {'expected': s.rev}, (409, 'not_ready'))
+    s.wafer('/rounds/R10/verdicts', {'expected': s.rev, 'id': 'V10', 'station': 'S1',
+                                     'reason': '提前'}, (409, 'round_incomplete'))
+    s.wafer(sub, {'expected': s.rev, 'station': 'S2', 'batch': {'id': 'S2A', 'kind': 'repeat',
+        'frame': frame0, 'csv': HEADER + '0,0,ok,90,60,C01\n'}})
+    s.rev = 8
+    s.wafer('/releases', {'expected': s.rev}, (409, 'not_ready'))
+    s.wafer('/rounds/R10/verdicts', {'expected': s.rev, 'id': 'V10', 'station': 'S2', 'reason': '采用乙'})
+    s.rev = 9
+    s.wafer('/rounds/R10/verdicts', {'expected': 8, 'id': 'V11', 'station': 'S1', 'reason': '迟到'}, (409, 'stale'))
+    release = s.wafer('/releases', {'expected': s.rev})
+    assert len(release['sha256']) == 64
+    replay = s.wafer(f'/releases/{s.rev}/replay')
+    assert replay['verified'] and replay['rounds'] == 1
+    manifest = json.loads(s.wafer(f'/releases/{s.rev}/manifest'))
+    found = manifest['payload']['rounds'][0]
+    assert found['parent'] == 'C01' and [item['station'] for item in found['submissions']] == ['S1', 'S2']
+    rows = list(csv.DictReader(io.StringIO(s.wafer(f'/releases/{s.rev}/sorter').decode())))
+    row = next(item for item in rows if (item['x'], item['y']) == ('0', '0'))
+    assert (row['bin'], row['batch']) == ('b', 'S2A'), row
+    # 以后的新复核、迟到来件与重送都不动已签件。
+    signed = s.wafer(f'/releases/{s.rev}/sorter')
+    s.wafer('/holds', {'expected': s.rev, 'site': [0, 0], 'id': 'H11', 'reason': '再复核'})
+    s.rev = 10
+    s.wafer('/rounds/R10/submissions', {'expected': s.rev, 'station': 'S1', 'batch': {
+        'id': 'LATE', 'kind': 'repeat', 'frame': frame0, 'csv': HEADER + '0,0,ok,90,95,C01\n'}},
+        (409, 'submission_conflict'))
+    assert s.wafer(f'/releases/{s.rev - 1}/sorter') == signed
+    assert s.wafer(f'/releases/{s.rev - 1}/replay')['verified']
+
+
+def round_void(s):
+    """两站都开路时作废本轮，以原父量测重开；旧编号来件不得占用新轮名额。"""
+    frame0 = {'offset': [0, 0], 'turn': 0, 'mirror': False}
+    s.wafer('/rounds', {'expected': s.rev, 'id': 'R12', 'site': [0, 0],
+                        'stations': ['S1', 'S2'], 'reason': '开路轮'})
+    s.rev += 1
+    for station, batch_id in (('S1', 'O1'), ('S2', 'O2')):
+        s.wafer('/rounds/R12/submissions', {'expected': s.rev, 'station': station,
+            'batch': {'id': batch_id, 'kind': 'repeat', 'frame': frame0, 'csv': HEADER + '0,0,open,,,S2A\n'}})
+        s.rev += 1
+    s.wafer('/releases', {'expected': s.rev}, (409, 'not_ready'))
+    s.batch('Y', '0,0,ok,90,60,S2A\n', 'repeat', expected=s.rev, error=(409, 'round_open'))
+    s.wafer('/rounds/R12/voids', {'expected': s.rev, 'id': 'W12', 'reason': '两站开路'})
+    s.rev += 1
+    s.wafer('/rounds', {'expected': s.rev, 'id': 'R13', 'site': [0, 0],
+                        'stations': ['S1', 'S2'], 'reason': '重开'})
+    s.rev += 1
+    # 甲站仍写旧轮编号的另一条有效读数：拒绝，且不占用新一轮名额。
+    s.wafer('/rounds/R12/submissions', {'expected': s.rev, 'station': 'S1',
+        'batch': {'id': 'LATE', 'kind': 'repeat', 'frame': frame0,
+                  'csv': HEADER + '0,0,ok,90,95,S2A\n'}}, (409, 'submission_conflict'))
+    assert s.wafer()['revision'] == s.rev
+    s.wafer('/rounds/R13/submissions', {'expected': s.rev, 'station': 'S1',
+        'batch': {'id': 'N1', 'kind': 'repeat', 'frame': frame0,
+                  'csv': HEADER + '0,0,ok,90,95,S2A\n'}})
+    s.rev += 1
+    view = next(item for item in s.wafer()['rounds'] if item['id'] == 'R12')
+    assert view['status'] == 'void' and len(view['submissions']) == 2
+    assert all(item['state'] == 'review' for item in view['submissions'])
+    assert s.wafer()['counts']['review'] == 1
+
+
+STEPS = (rules, wafer, preview, ingest, grid, trace, seal, replay, export, hold, compare, rounds, round_void)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--through', choices=[flow.__name__ for flow in STEPS], default='compare')
+    parser.add_argument('--through', choices=[flow.__name__ for flow in STEPS], default='round_void')
     args = parser.parse_args()
     with TemporaryDirectory(prefix='diegrade-smoke-') as temp, make_server(Database(Path(temp) / 'db'), 0) as server:
         worker = Thread(target=server.serve_forever, daemon=True)

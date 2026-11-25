@@ -29,3 +29,9 @@ textarea { width: 100%; resize: vertical; font-family: ui-monospace, monospace; 
   .catalog { grid-template-columns: 1fr; }
   .catalog form + form { border-top: 1px solid var(--line); padding-top: 12px; }
 }
+.round-forms { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 22px; margin-top: 14px; }
+.round-forms form h2 { margin-bottom: 2px; }
+#round-list { margin-top: 8px; }
+@media (max-width: 650px) {
+  .round-forms { grid-template-columns: 1fr; }
+}

@@ -41,6 +41,7 @@
       <div role="tablist" class="tabs" aria-label="操作类型" id="tabs">
         <button type="button" id="tab-batch" data-panel="batch" role="tab" aria-selected="true" aria-controls="batch">批次预检与导入</button>
         <button type="button" id="tab-hold" data-panel="hold" role="tab" aria-selected="false" aria-controls="hold" tabindex="-1">复核登记</button>
+        <button type="button" id="tab-round" data-panel="round" role="tab" aria-selected="false" aria-controls="round" tabindex="-1">两站复测轮次</button>
         <button type="button" id="tab-release" data-panel="release" role="tab" aria-selected="false" aria-controls="release" tabindex="-1">分选交付</button>
         <button type="button" id="tab-catalog" data-panel="catalog" role="tab" aria-selected="false" aria-controls="catalog" tabindex="-1">规则与晶圆</button>
       </div>
@@ -67,6 +68,58 @@
           <div class="row"><label>复核编号 <input name="id" required maxlength="40"></label><label class="wide">复核事由 <input name="reason" required maxlength="240"></label></div>
           <button class="primary">登记复核</button>
         </form>
+      </section>
+      <section id="round" role="tabpanel" aria-labelledby="tab-round" hidden>
+        <h2>已开立轮次</h2>
+        <div id="round-list"></div>
+        <div class="round-forms">
+          <form id="round-form">
+            <h2>开立复测轮次</h2>
+            <p id="round-site">尚未选中格点</p>
+            <div class="row">
+              <label>轮次编号 <input name="id" required maxlength="40" autocomplete="off"></label>
+              <label>甲站代号 <input name="station_a" required maxlength="40" value="A"></label>
+              <label>乙站代号 <input name="station_b" required maxlength="40" value="B"></label>
+              <label class="wide">开立事由 <input name="reason" required maxlength="240"></label>
+            </div>
+            <button class="primary">开立轮次</button>
+          </form>
+          <form id="submission-form">
+            <h2>登记工位来件</h2>
+            <div class="row">
+              <label>所属轮次 <input name="round" required maxlength="40"></label>
+              <label>送回工位 <input name="station" required maxlength="40"></label>
+              <label>来件批次 <input name="id" required maxlength="40"></label>
+            </div>
+            <div class="row">
+              <label>逆时针旋转 <select name="turn"><option value="0">0°</option><option value="1">90°</option><option value="2">180°</option><option value="3">270°</option></select></label>
+              <label>横向平移 <input type="number" name="dx" value="0" min="-2048" max="2048" required></label>
+              <label>纵向平移 <input type="number" name="dy" value="0" min="-2048" max="2048" required></label>
+              <label class="check"><input type="checkbox" name="mirror"> 横轴镜像</label>
+            </div>
+            <label>来件内容 <textarea name="csv" rows="3" required spellcheck="false" placeholder="x,y,contact,leak_na,margin_mv,parent"></textarea></label>
+            <button class="primary">送回证据</button>
+          </form>
+          <form id="verdict-form">
+            <h2>裁决采用来件</h2>
+            <div class="row">
+              <label>所属轮次 <input name="round" required maxlength="40"></label>
+              <label>采用工位 <input name="station" required maxlength="40"></label>
+              <label>裁决编号 <input name="id" required maxlength="40"></label>
+              <label class="wide">裁决事由 <input name="reason" required maxlength="240"></label>
+            </div>
+            <button class="primary">提交裁决</button>
+          </form>
+          <form id="void-form">
+            <h2>作废开路轮次</h2>
+            <div class="row">
+              <label>所属轮次 <input name="round" required maxlength="40"></label>
+              <label>作废编号 <input name="id" required maxlength="40"></label>
+              <label class="wide">作废事由 <input name="reason" required maxlength="240"></label>
+            </div>
+            <button>作废本轮</button>
+          </form>
+        </div>
       </section>
       <section id="release" role="tabpanel" aria-labelledby="tab-release" hidden>
         <div class="row"><button id="seal" class="primary" type="button">签出当前版</button><span id="release-status"></span></div>

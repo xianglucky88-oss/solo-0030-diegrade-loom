@@ -60,6 +60,26 @@ def hold(conn, body, wafer):
     return intake.hold(conn, wafer, body)
 
 
+@route('POST', r'/wafers/([^/]+)/rounds', write=True)
+def open_round(conn, body, wafer):
+    return intake.open_round(conn, wafer, body)
+
+
+@route('POST', r'/wafers/([^/]+)/rounds/([^/]+)/submissions', write=True)
+def submit(conn, body, wafer, round_id):
+    return intake.submit(conn, wafer, round_id, body)
+
+
+@route('POST', r'/wafers/([^/]+)/rounds/([^/]+)/verdicts', write=True)
+def decide(conn, body, wafer, round_id):
+    return intake.decide(conn, wafer, round_id, body)
+
+
+@route('POST', r'/wafers/([^/]+)/rounds/([^/]+)/voids', write=True)
+def void_round(conn, body, wafer, round_id):
+    return intake.void_round(conn, wafer, round_id, body)
+
+
 @route('POST', r'/wafers/([^/]+)/releases', write=True)
 def seal(conn, body, wafer):
     result = archives.seal(conn, wafer, body)

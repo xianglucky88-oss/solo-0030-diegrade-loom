@@ -4,6 +4,7 @@ import {bindCatalog, loadRules} from './catalog.js';
 import {byId, options} from './dom.js';
 import {bindTabs} from './navigation.js';
 import {bindReleases, clearComparison, renderReleases} from './releases.js';
+import {bindRounds, renderRounds} from './rounds.js';
 import {flash, renderCounters} from './status.js';
 import {renderTrace} from './trace.js';
 import {renderMap} from './wafer-map.js';
@@ -46,6 +47,7 @@ function render(data) {
   renderMap(data, selected, pick);
   renderTrace(null);
   renderReleases(data, action);
+  renderRounds(data);
   byId('flag-focus').disabled = !data?.cells.some(c => c.state === 'missing' || c.state === 'review');
 }
 
@@ -70,6 +72,7 @@ function initialize() {
   bindBatch(action, current, open);
   bindCatalog(action, open);
   bindReleases(action, current, open);
+  bindRounds(action, current, open, () => selected);
   byId('reload').addEventListener('click', action(() => open()));
   byId('wafer').addEventListener('change', action(event => open(event.target.value)));
   byId('flag-focus').addEventListener('click', () => {

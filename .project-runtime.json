@@ -15,6 +15,10 @@
     {"workflow_id":"replay","command":"python3 -B -m tools.smoke --through replay"},
     {"workflow_id":"export","command":"python3 -B -m tools.smoke --through export"},
     {"workflow_id":"hold","command":"python3 -B -m tools.smoke --through hold"},
-    {"workflow_id":"compare","command":"python3 -B -m tools.smoke --through compare"}
+    {"workflow_id":"compare","command":"python3 -B -m tools.smoke --through compare"},
+    {"workflow_id":"round","command":"python3 -B -m tools.smoke --through rounds"},
+    {"workflow_id":"submit","command":"python3 -B -m tools.smoke --through rounds"},
+    {"workflow_id":"decide","command":"python3 -B -m tools.smoke --through rounds"},
+    {"workflow_id":"void","command":"python3 -B -m tools.smoke --through round_void"}
   ]
 }
